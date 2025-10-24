@@ -1,0 +1,30 @@
+{
+  "name": "smy-nav",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "format": "prettier --write src/"
+  },
+  "dependencies": {
+    "@mdi/font": "^7.4.47",
+    "axios": "^1.12.2",
+    "date-fns": "^4.1.0",
+    "pinia": "^3.0.3",
+    "vue": "^3.5.22",
+    "vue-router": "4",
+    "vuetify": "^3.10.6"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.1.4",
+    "prettier": "3.6.2",
+    "vite": "^5.4.10",
+    "vite-plugin-vue-devtools": "^7.4.6"
+  }
+}

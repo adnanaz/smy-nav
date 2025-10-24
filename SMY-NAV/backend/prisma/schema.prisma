@@ -1,0 +1,207 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Enum definitions
+enum UserRole {
+  super_admin
+  admin
+  agent
+}
+
+enum AgencyStatus {
+  active
+  suspended
+  inactive
+}
+
+enum ParticipantStatus {
+  draft
+  submitted
+  verified
+  waiting_quota
+  sent_to_center
+  waiting_dispatch
+  completed
+  rejected
+}
+
+enum BatchStatus {
+  forming
+  ready
+  sent_to_center
+  in_training
+  completed
+  cancelled
+}
+
+// Models
+model Agency {
+  id               String        @id @default(uuid()) @db.Uuid
+  name             String        @db.VarChar(255)
+  code             String        @unique @db.VarChar(50)
+  email            String        @unique @db.VarChar(255)
+  phone            String?       @db.VarChar(20)
+  address          String?       @db.Text
+  contactPerson    String?       @map("contact_person") @db.VarChar(255)
+  status           AgencyStatus  @default(active)
+  maxParticipants  Int           @default(100) @map("max_participants")
+  createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime      @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  users        User[]
+  participants Participant[]
+
+  @@map("agencies")
+}
+
+model User {
+  id            String    @id @default(uuid()) @db.Uuid
+  agencyId      String?   @map("agency_id") @db.Uuid
+  username      String    @unique @db.VarChar(100)
+  email         String    @unique @db.VarChar(255)
+  passwordHash  String    @map("password_hash") @db.VarChar(255)
+  fullName      String    @map("full_name") @db.VarChar(255)
+  role          UserRole
+  isActive      Boolean   @default(true) @map("is_active")
+  lastLogin     DateTime? @map("last_login") @db.Timestamptz
+  emailVerified Boolean   @default(false) @map("email_verified")
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations (simplified)
+  agency              Agency?       @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  createdParticipants Participant[] @relation("ParticipantCreator")
+  createdBatches      TrainingBatch[]
+  activityLogs        ActivityLog[]
+
+  @@index([agencyId])
+  @@index([email])
+  @@index([role])
+  @@map("users")
+}
+
+model Participant {
+  id                   String            @id @default(uuid()) @db.Uuid
+  agencyId             String            @map("agency_id") @db.Uuid
+  createdBy            String            @map("created_by") @db.Uuid
+  batchId              String?           @map("batch_id") @db.Uuid // Add batch reference
+  
+  // Personal Information
+  fullName             String            @map("full_name") @db.VarChar(255)
+  nik                  String?           @unique @map("nik") @db.VarChar(50) // Made nullable for agency submissions
+  email                String?           @db.VarChar(255)
+  phone                String?           @db.VarChar(20)
+  birthDate            DateTime?         @map("birth_date") @db.Date // Made nullable for agency submissions
+  birthPlace           String?           @map("birth_place") @db.VarChar(255)
+  gender               String?           @db.VarChar(10)
+  address              String?           @db.Text
+  
+  // Training Information
+  trainingProgram      String            @map("training_program") @db.VarChar(255)
+  registrationNumber   String            @unique @map("registration_number") @db.VarChar(100)
+  
+  // Status & Progress
+  status               ParticipantStatus @default(draft)
+  currentProgressStep  Int               @default(1) @map("current_progress_step")
+  progressPercentage   Decimal           @default(0.00) @map("progress_percentage") @db.Decimal(5, 2)
+  notes                String?           @db.Text
+  
+  // Documents stored as JSON (simpler approach)
+  documents            Json?             @db.JsonB
+  
+  // Timestamps
+  submittedAt          DateTime?         @map("submitted_at") @db.Timestamptz
+  approvedAt           DateTime?         @map("approved_at") @db.Timestamptz
+  completedAt          DateTime?         @map("completed_at") @db.Timestamptz
+  createdAt            DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime          @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations (simplified)
+  agency              Agency                @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  creator             User                  @relation("ParticipantCreator", fields: [createdBy], references: [id])
+  batch               TrainingBatch?        @relation(fields: [batchId], references: [id])
+  activityLogs        ActivityLog[]
+
+  @@index([agencyId])
+  @@index([status])
+  @@index([nik])
+  @@index([createdBy])
+  @@index([batchId])
+  @@index([registrationNumber])
+  @@map("participants")
+}
+
+model TrainingBatch {
+  id                   String      @id @default(uuid()) @db.Uuid
+  batchNumber          String      @unique @map("batch_number") @db.VarChar(50) // BST-2025-001
+  trainingProgram      String      @map("training_program") @db.VarChar(50)
+  year                 Int         @default(2025)
+  sequenceNumber       Int         @map("sequence_number") // 1, 2, 3 untuk angkatan ke-
+  status               BatchStatus @default(forming)
+  minParticipants      Int         @default(15) @map("min_participants")
+  maxParticipants      Int         @default(24) @map("max_participants")
+  currentParticipants  Int         @default(0) @map("current_participants")
+  targetStartDate      DateTime?   @map("target_start_date") @db.Date
+  actualStartDate      DateTime?   @map("actual_start_date") @db.Date
+  completionDate       DateTime?   @map("completion_date") @db.Date
+  notes                String?     @db.Text
+  createdAt            DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime    @updatedAt @map("updated_at") @db.Timestamptz
+  createdBy            String?     @map("created_by") @db.Uuid
+
+  // Relations
+  participants         Participant[]
+  creator              User?         @relation(fields: [createdBy], references: [id])
+
+  @@index([trainingProgram, year])
+  @@index([status])
+  @@index([batchNumber])
+  @@map("training_batches")
+}
+
+model ActivityLog {
+  id            String    @id @default(uuid()) @db.Uuid
+  userId        String?   @map("user_id") @db.Uuid
+  participantId String?   @map("participant_id") @db.Uuid
+  agencyId      String?   @map("agency_id") @db.Uuid
+  
+  action        String    @db.VarChar(100)
+  entityType    String    @map("entity_type") @db.VarChar(50)
+  entityId      String?   @map("entity_id") @db.Uuid
+  description   String?   @db.Text
+  metadata      Json?     @db.JsonB
+  ipAddress     String?   @map("ip_address") @db.Inet
+  userAgent     String?   @map("user_agent") @db.Text
+  
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relations
+  user        User?        @relation(fields: [userId], references: [id])
+  participant Participant? @relation(fields: [participantId], references: [id])
+
+  @@index([userId])
+  @@index([participantId])
+  @@index([createdAt])
+  @@map("activity_logs")
+}
+
+model SystemSetting {
+  id          String   @id @default(uuid()) @db.Uuid
+  key         String   @unique @db.VarChar(100)
+  value       String?  @db.Text
+  description String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("system_settings")
+}
