@@ -8,6 +8,8 @@ import RegisterView from '../views/auth/RegisterView.vue'
 import DashboardView from '../views/dashboard/DashboardView.vue'
 import ParticipantView from '../views/dashboard/ParticipantView.vue'
 import ParticipantCreateView from '../views/participants/ParticipantCreateView.vue'
+import InvoiceView from '../views/dashboard/InvoiceView.vue'
+import AdminInvoiceView from '../views/dashboard/AdminInvoiceView.vue'
 import ProfileView from '../views/profile/ProfileView.vue'
 
 const routes = [
@@ -66,6 +68,25 @@ const routes = [
     meta: { 
       title: 'Tambah Peserta - SMY-NAV',
       requiresAuth: true 
+    }
+  },
+  {
+    path: '/invoices',
+    name: 'invoices',
+    component: InvoiceView,
+    meta: { 
+      title: 'Manajemen Invoice - SMY-NAV',
+      requiresAuth: true 
+    }
+  },
+  {
+    path: '/admin/invoices',
+    name: 'admin-invoices',
+    component: AdminInvoiceView,
+    meta: { 
+      title: 'Admin - Manajemen Invoice - SMY-NAV',
+      requiresAuth: true,
+      requiresAdmin: true
     }
   },
   {

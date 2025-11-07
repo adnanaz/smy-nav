@@ -34,6 +34,20 @@ enum ParticipantStatus {
   rejected
 }
 
+enum PaymentStatus {
+  pending
+  pending_verification
+  paid
+  approved
+  rejected
+  refunded
+}
+
+enum PaymentOption {
+  pay_now
+  pay_later
+}
+
 enum BatchStatus {
   forming
   ready
@@ -57,10 +71,12 @@ model Agency {
   createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamptz
   updatedAt        DateTime      @updatedAt @map("updated_at") @db.Timestamptz
 
-  // Relations
-  users        User[]
-  participants Participant[]
+    // Relations
+  users                User[]
+  participants         Participant[]
+  invoices             TrainingInvoice[]     @relation("AgencyInvoices")
 
+  @@index([status])
   @@map("agencies")
 }
 
@@ -82,6 +98,7 @@ model User {
   agency              Agency?       @relation(fields: [agencyId], references: [id], onDelete: Cascade)
   createdParticipants Participant[] @relation("ParticipantCreator")
   createdBatches      TrainingBatch[]
+  approvedInvoices    TrainingInvoice[] @relation("InvoiceApprover")
   activityLogs        ActivityLog[]
 
   @@index([agencyId])
@@ -116,8 +133,15 @@ model Participant {
   progressPercentage   Decimal           @default(0.00) @map("progress_percentage") @db.Decimal(5, 2)
   notes                String?           @db.Text
   
+  // Payment Reference
+  invoiceId            String?           @map("invoice_id") @db.Uuid
+  paymentOption        PaymentOption     @default(pay_later) @map("payment_option")
+  
   // Documents stored as JSON (simpler approach)
   documents            Json?             @db.JsonB
+  
+  // Invoice document (uploaded by admin when document arrives at SMY)
+  invoiceDocument      Json?             @map("invoice_document") @db.JsonB
   
   // Timestamps
   submittedAt          DateTime?         @map("submitted_at") @db.Timestamptz
@@ -130,6 +154,7 @@ model Participant {
   agency              Agency                @relation(fields: [agencyId], references: [id], onDelete: Cascade)
   creator             User                  @relation("ParticipantCreator", fields: [createdBy], references: [id])
   batch               TrainingBatch?        @relation(fields: [batchId], references: [id])
+  invoice             TrainingInvoice?      @relation("InvoiceParticipants", fields: [invoiceId], references: [id])
   activityLogs        ActivityLog[]
 
   @@index([agencyId])
@@ -137,6 +162,7 @@ model Participant {
   @@index([nik])
   @@index([createdBy])
   @@index([batchId])
+  @@index([invoiceId])
   @@index([registrationNumber])
   @@map("participants")
 }
@@ -167,6 +193,45 @@ model TrainingBatch {
   @@index([status])
   @@index([batchNumber])
   @@map("training_batches")
+}
+
+model TrainingInvoice {
+  id               String            @id @default(uuid()) @db.Uuid
+  agencyId         String            @map("agency_id") @db.Uuid
+  trainingProgram  String            @map("training_program") @db.VarChar(50)
+  invoiceNumber    String            @unique @map("invoice_number") @db.VarChar(100) // INV-MSI-BST-001-2025
+  
+  // Financial Info
+  participantCount Int               @map("participant_count") @default(0)
+  pricePerUnit     Decimal           @map("price_per_unit") @db.Decimal(12, 2)
+  totalAmount      Decimal           @map("total_amount") @db.Decimal(12, 2)
+  
+  // Payment Info
+  paymentStatus    PaymentStatus     @default(pending) @map("payment_status")
+  paymentMethod    String?           @map("payment_method") // transfer_bank, cash, etc
+  paymentDate      DateTime?         @map("payment_date") @db.Timestamptz
+  
+  // Documents
+  invoiceDocument  Json?             @map("invoice_document") @db.JsonB // PDF invoice
+  paymentProof     Json?             @map("payment_proof") @db.JsonB // Bukti transfer dari agency
+  receiptDocument  Json?             @map("receipt_document") @db.JsonB // Kwitansi/receipt
+  
+  // Metadata
+  notes            String?           @db.Text
+  approvedBy       String?           @map("approved_by") @db.Uuid
+  approvedAt       DateTime?         @map("approved_at") @db.Timestamptz
+  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime          @updatedAt @map("updated_at") @db.Timestamptz
+  
+  // Relations
+  agency           Agency            @relation("AgencyInvoices", fields: [agencyId], references: [id], onDelete: Cascade)
+  approver         User?             @relation("InvoiceApprover", fields: [approvedBy], references: [id])
+  participants     Participant[]     @relation("InvoiceParticipants")
+  
+  @@index([agencyId])
+  @@index([trainingProgram])
+  @@index([paymentStatus])
+  @@map("training_invoices")
 }
 
 model ActivityLog {

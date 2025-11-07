@@ -3,33 +3,25 @@
     <v-container fluid class="pa-6">
       <!-- Header -->
       <div class="d-flex align-center mb-6">
-        <v-btn
-          icon="mdi-arrow-left"
-          variant="text"
-          @click="$router.back()"
-          class="me-3"
-        />
+        <v-btn icon="mdi-arrow-left" variant="text" @click="$router.back()" class="me-3" />
         <div>
           <h1 class="text-h4 font-weight-bold mb-1">Tambah Peserta Baru</h1>
-          <p class="text-subtitle-1 text-grey-darken-1">Isi formulir di bawah untuk mendaftarkan peserta pelatihan maritim</p>
+          <p class="text-subtitle-1 text-grey-darken-1">
+            Isi formulir di bawah untuk mendaftarkan peserta pelatihan maritim
+          </p>
         </div>
       </div>
 
       <!-- Progress Stepper -->
       <v-card class="mb-6" elevation="2">
-        <v-stepper
-          v-model="currentStep"
-          :items="stepperItems"
-          hide-actions
-          flat
-        >
+        <v-stepper v-model="currentStep" :items="stepperItems" hide-actions flat>
           <template #item.1>
             <v-card-text class="pa-6">
               <h3 class="text-h6 mb-4">
                 <v-icon class="me-2">mdi-account</v-icon>
                 Data Peserta & Pilih Jenis Diklat
               </h3>
-              
+
               <!-- Nama Lengkap -->
               <v-row>
                 <v-col cols="12">
@@ -45,7 +37,7 @@
                   />
                 </v-col>
               </v-row>
-              
+
               <!-- Training Programs -->
               <v-row class="mt-2">
                 <v-col cols="12">
@@ -102,16 +94,17 @@
                       Konfirmasi Sertifikat BST
                     </v-card-title>
                     <v-card-text>
-                      <v-alert 
-                        type="info" 
-                        variant="tonal" 
+                      <v-alert
+                        type="info"
+                        variant="tonal"
                         density="compact"
                         icon="mdi-information"
                         class="mb-3"
                       >
-                        Anda memilih diklat yang membutuhkan Sertifikat BST. Mohon konfirmasi apakah peserta sudah memiliki sertifikat tersebut.
+                        Anda memilih diklat yang membutuhkan Sertifikat BST. Mohon konfirmasi apakah
+                        peserta sudah memiliki sertifikat tersebut.
                       </v-alert>
-                      
+
                       <v-checkbox
                         v-model="formData.hasBSTCertificate"
                         label="Peserta sudah memiliki Sertifikat BST"
@@ -120,32 +113,24 @@
                       >
                         <template #label>
                           <span class="text-body-1">
-                            Peserta sudah memiliki Sertifikat BST 
+                            Peserta sudah memiliki Sertifikat BST
                             <v-icon color="primary" size="small">mdi-certificate</v-icon>
                           </span>
                         </template>
                       </v-checkbox>
-                      
+
                       <div v-if="formData.hasBSTCertificate" class="mt-2">
-                        <v-alert 
-                          type="success" 
-                          variant="tonal" 
-                          density="compact"
-                          icon="mdi-check"
-                        >
+                        <v-alert type="success" variant="tonal" density="compact" icon="mdi-check">
                           Bagus! Anda perlu upload scan Sertifikat BST di step berikutnya.
                         </v-alert>
                       </div>
-                      
+
                       <div v-else-if="showBSTCheckbox" class="mt-2">
-                        <v-alert 
-                          type="warning" 
-                          variant="tonal" 
-                          density="compact"
-                          icon="mdi-alert"
-                        >
-                          <strong>Perhatian:</strong> Untuk mengikuti diklat yang dipilih, peserta harus memiliki Sertifikat BST terlebih dahulu. 
-                          Silakan centang checkbox jika peserta sudah memiliki sertifikat BST, atau pertimbangkan untuk mendaftar BST terlebih dahulu.
+                        <v-alert type="warning" variant="tonal" density="compact" icon="mdi-alert">
+                          <strong>Perhatian:</strong> Untuk mengikuti diklat yang dipilih, peserta
+                          harus memiliki Sertifikat BST terlebih dahulu. Silakan centang checkbox
+                          jika peserta sudah memiliki sertifikat BST, atau pertimbangkan untuk
+                          mendaftar BST terlebih dahulu.
                         </v-alert>
                       </div>
                     </v-card-text>
@@ -178,11 +163,67 @@
                       <strong>Deskripsi:</strong> {{ training.description }}
                     </div>
                     <div class="mb-3">
+                      <strong>Harga:</strong> 
+                      <span class="text-success font-weight-bold">
+                        Rp {{ training.fee ? training.fee.toLocaleString('id-ID') : 'Gratis' }}
+                      </span>
+                    </div>
+                    <div class="mb-3">
                       <strong>Durasi Pelatihan:</strong> {{ training.duration }}
                     </div>
                     <div class="mb-3">
                       <strong>Proses Pembuatan Dokumen:</strong> {{ training.processingTime }}
                     </div>
+                  </v-card-text>
+                </v-card>
+
+                <!-- Payment Option -->
+                <v-card variant="outlined" class="mt-4">
+                  <v-card-title class="bg-green-lighten-4">
+                    <v-icon class="me-2">mdi-credit-card</v-icon>
+                    Opsi Pembayaran
+                  </v-card-title>
+                  <v-card-text>
+                    <v-alert
+                      type="info"
+                      variant="tonal"
+                      density="compact"
+                      icon="mdi-information"
+                      class="mb-3"
+                    >
+                      Silakan pilih opsi pembayaran yang sesuai dengan preferensi Anda.
+                    </v-alert>
+
+                    <v-radio-group v-model="formData.paymentOption" color="primary" class="mt-3">
+                      <v-radio value="pay_now" label="Bayar Sekarang">
+                        <template #label>
+                          <div class="d-flex align-center">
+                            <v-icon color="success" class="me-2">mdi-cash</v-icon>
+                            <div>
+                              <div class="font-weight-medium">Bayar Sekarang</div>
+                              <div class="text-caption text-grey-darken-1">
+                                Bayar langsung saat pendaftaran. Invoice akan dibuat dan dapat
+                                didownload setelah submit.
+                              </div>
+                            </div>
+                          </div>
+                        </template>
+                      </v-radio>
+
+                      <v-radio value="pay_later" label="Bayar Nanti" class="mt-3">
+                        <template #label>
+                          <div class="d-flex align-center">
+                            <v-icon color="orange" class="me-2">mdi-clock-outline</v-icon>
+                            <div>
+                              <div class="font-weight-medium">Bayar Nanti</div>
+                              <div class="text-caption text-grey-darken-1">
+                                Bayar setelah sertifikat selesai. Invoice akan dikirim kemudian.
+                              </div>
+                            </div>
+                          </div>
+                        </template>
+                      </v-radio>
+                    </v-radio-group>
                   </v-card-text>
                 </v-card>
 
@@ -193,36 +234,39 @@
                     Dokumen yang Diperlukan (Gabungan)
                   </v-card-title>
                   <v-card-text>
-                    <v-alert 
-                      type="info" 
-                      variant="tonal" 
+                    <v-alert
+                      type="info"
+                      variant="tonal"
                       density="compact"
                       icon="mdi-information"
                       class="mb-3"
                     >
-                      <strong>Catatan:</strong> Waktu proses ini adalah estimasi kasar, sertifikat bisa jadi lebih cepat daripada itu.
+                      <strong>Catatan:</strong> Waktu proses ini adalah estimasi kasar, sertifikat
+                      bisa jadi lebih cepat daripada itu.
                     </v-alert>
-                    
-                    <v-alert 
+
+                    <v-alert
                       v-if="showBSTCheckbox && !formData.hasBSTCertificate"
-                      type="warning" 
-                      variant="tonal" 
+                      type="warning"
+                      variant="tonal"
                       density="compact"
                       icon="mdi-alert"
                       class="mb-3"
                     >
-                      <strong>Perhatian:</strong> Anda belum mengkonfirmasi kepemilikan Sertifikat BST. Silakan centang checkbox konfirmasi di atas untuk melanjutkan.
+                      <strong>Perhatian:</strong> Anda belum mengkonfirmasi kepemilikan Sertifikat
+                      BST. Silakan centang checkbox konfirmasi di atas untuk melanjutkan.
                     </v-alert>
 
-                    <v-alert 
+                    <v-alert
                       v-if="formData.hasBSTCertificate && needsBSTCertificateUpload"
-                      type="success" 
-                      variant="tonal" 
+                      type="success"
+                      variant="tonal"
                       density="compact"
                       icon="mdi-check"
                       class="mb-3"
                     >
-                      <strong>Bagus:</strong> Sertifikat BST akan diminta untuk diupload di step berikutnya.
+                      <strong>Bagus:</strong> Sertifikat BST akan diminta untuk diupload di step
+                      berikutnya.
                     </v-alert>
 
                     <div>
@@ -235,7 +279,9 @@
                           :color="doc === 'passport_optional' ? 'grey' : 'primary'"
                         >
                           {{ getDocumentName(doc) }}
-                          <v-icon v-if="doc === 'passport_optional'" end size="small">mdi-help-circle</v-icon>
+                          <v-icon v-if="doc === 'passport_optional'" end size="small"
+                            >mdi-help-circle</v-icon
+                          >
                         </v-chip>
                       </v-chip-group>
                     </div>
@@ -251,97 +297,95 @@
                 <v-icon class="me-2">mdi-file-document-multiple</v-icon>
                 Upload Dokumen
               </h3>
-              
-              <v-alert
-                type="info"
-                variant="tonal"
-                class="mb-4"
-              >
-                Upload dokumen sesuai dengan jenis diklat yang dipilih. Pastikan file dalam format JPG, PNG, atau PDF dengan ukuran maksimal 3MB.
+
+              <v-alert type="info" variant="tonal" class="mb-4">
+                Upload dokumen sesuai dengan jenis diklat yang dipilih. Pastikan file dalam format
+                JPG, PNG, atau PDF dengan ukuran maksimal 3MB.
                 <div v-if="formData.hasBSTCertificate && needsBSTCertificateUpload" class="mt-2">
-                  <strong>Catatan:</strong> Karena Anda sudah mengkonfirmasi kepemilikan Sertifikat BST, pastikan untuk upload scan sertifikat tersebut.
+                  <strong>Catatan:</strong> Karena Anda sudah mengkonfirmasi kepemilikan Sertifikat
+                  BST, pastikan untuk upload scan sertifikat tersebut.
                 </div>
               </v-alert>
 
               <v-row v-if="selectedTrainingTypes.length > 0">
-                  <!-- KTP -->
-                  <v-col cols="12" md="6" v-if="requiredDocuments.includes('ktp')">
-                    <v-file-input
-                      v-model="formData.files.ktp"
-                      label="Scan KTP *"
-                      variant="outlined"
-                      accept="image/*,.pdf"
-                      prepend-icon="mdi-card-account-details"
-                      show-size
-                      @change="validateFileSize"
-                    />
-                  </v-col>
+                <!-- KTP -->
+                <v-col cols="12" md="6" v-if="requiredDocuments.includes('ktp')">
+                  <v-file-input
+                    v-model="formData.files.ktp"
+                    label="Scan KTP *"
+                    variant="outlined"
+                    accept="image/*,.pdf"
+                    prepend-icon="mdi-card-account-details"
+                    show-size
+                    @change="validateFileSize"
+                  />
+                </v-col>
 
-                  <!-- Ijazah -->
-                  <v-col cols="12" md="6" v-if="requiredDocuments.includes('ijazah')">
-                    <v-file-input
-                      v-model="formData.files.ijazah"
-                      label="Scan Ijazah *"
-                      variant="outlined"
-                      accept="image/*,.pdf"
-                      prepend-icon="mdi-school"
-                      show-size
-                      @change="validateFileSize"
-                    />
-                  </v-col>
+                <!-- Ijazah -->
+                <v-col cols="12" md="6" v-if="requiredDocuments.includes('ijazah')">
+                  <v-file-input
+                    v-model="formData.files.ijazah"
+                    label="Scan Ijazah *"
+                    variant="outlined"
+                    accept="image/*,.pdf"
+                    prepend-icon="mdi-school"
+                    show-size
+                    @change="validateFileSize"
+                  />
+                </v-col>
 
-                  <!-- Foto -->
-                  <v-col cols="12" md="6" v-if="requiredDocuments.includes('foto')">
-                    <v-file-input
-                      v-model="formData.files.foto"
-                      label="Pas Foto *"
-                      variant="outlined"
-                      accept="image/*"
-                      prepend-icon="mdi-camera"
-                      show-size
-                      @change="validateFileSize"
-                    />
-                  </v-col>
+                <!-- Foto -->
+                <v-col cols="12" md="6" v-if="requiredDocuments.includes('foto')">
+                  <v-file-input
+                    v-model="formData.files.foto"
+                    label="Pas Foto *"
+                    variant="outlined"
+                    accept="image/*"
+                    prepend-icon="mdi-camera"
+                    show-size
+                    @change="validateFileSize"
+                  />
+                </v-col>
 
-                  <!-- Surat Sehat -->
-                  <v-col cols="12" md="6" v-if="requiredDocuments.includes('surat_sehat')">
-                    <v-file-input
-                      v-model="formData.files.surat_sehat"
-                      label="Surat Keterangan Sehat *"
-                      variant="outlined"
-                      accept="image/*,.pdf"
-                      prepend-icon="mdi-medical-bag"
-                      show-size
-                      @change="validateFileSize"
-                    />
-                  </v-col>
+                <!-- Surat Sehat -->
+                <v-col cols="12" md="6" v-if="requiredDocuments.includes('surat_sehat')">
+                  <v-file-input
+                    v-model="formData.files.surat_sehat"
+                    label="Surat Keterangan Sehat *"
+                    variant="outlined"
+                    accept="image/*,.pdf"
+                    prepend-icon="mdi-medical-bag"
+                    show-size
+                    @change="validateFileSize"
+                  />
+                </v-col>
 
-                  <!-- Passport (Optional) -->
-                  <v-col cols="12" md="6" v-if="requiredDocuments.includes('passport_optional')">
-                    <v-file-input
-                      v-model="formData.files.passport"
-                      label="Scan Passport (Opsional)"
-                      variant="outlined"
-                      accept="image/*,.pdf"
-                      prepend-icon="mdi-passport"
-                      show-size
-                      @change="validateFileSize"
-                    />
-                  </v-col>
+                <!-- Passport (Optional) -->
+                <v-col cols="12" md="6" v-if="requiredDocuments.includes('passport_optional')">
+                  <v-file-input
+                    v-model="formData.files.passport"
+                    label="Scan Passport (Opsional)"
+                    variant="outlined"
+                    accept="image/*,.pdf"
+                    prepend-icon="mdi-passport"
+                    show-size
+                    @change="validateFileSize"
+                  />
+                </v-col>
 
-                  <!-- Sertifikat BST -->
-                  <v-col cols="12" md="6" v-if="requiredDocuments.includes('sertifikat_bst')">
-                    <v-file-input
-                      v-model="formData.files.sertifikat_bst"
-                      label="Sertifikat BST *"
-                      variant="outlined"
-                      accept="image/*,.pdf"
-                      prepend-icon="mdi-certificate"
-                      show-size
-                      @change="validateFileSize"
-                    />
-                  </v-col>
-                </v-row>
+                <!-- Sertifikat BST -->
+                <v-col cols="12" md="6" v-if="requiredDocuments.includes('sertifikat_bst')">
+                  <v-file-input
+                    v-model="formData.files.sertifikat_bst"
+                    label="Sertifikat BST *"
+                    variant="outlined"
+                    accept="image/*,.pdf"
+                    prepend-icon="mdi-certificate"
+                    show-size
+                    @change="validateFileSize"
+                  />
+                </v-col>
+              </v-row>
             </v-card-text>
           </template>
 
@@ -351,7 +395,7 @@
                 <v-icon class="me-2">mdi-check-circle</v-icon>
                 Konfirmasi Data
               </h3>
-              
+
               <!-- Summary Data -->
               <v-row>
                 <v-col cols="12" md="6">
@@ -372,13 +416,11 @@
                           </v-chip>
                         </v-chip-group>
                       </div>
-                      <div v-if="formData.hasBSTCertificate && needsBSTCertificateUpload" class="mb-2">
-                        <v-alert 
-                          type="success" 
-                          variant="tonal" 
-                          density="compact"
-                          icon="mdi-check"
-                        >
+                      <div
+                        v-if="formData.hasBSTCertificate && needsBSTCertificateUpload"
+                        class="mb-2"
+                      >
+                        <v-alert type="success" variant="tonal" density="compact" icon="mdi-check">
                           Sertifikat BST dikonfirmasi tersedia
                         </v-alert>
                       </div>
@@ -402,6 +444,114 @@
                       </v-chip-group>
                     </v-card-text>
                   </v-card>
+
+                  <v-card variant="outlined" class="mt-4">
+                    <v-card-title class="bg-grey-lighten-4">Opsi Pembayaran</v-card-title>
+                    <v-card-text>
+                      <div class="d-flex align-center">
+                        <v-icon
+                          :color="formData.paymentOption === 'pay_now' ? 'success' : 'orange'"
+                          class="me-2"
+                        >
+                          {{
+                            formData.paymentOption === 'pay_now' ? 'mdi-cash' : 'mdi-clock-outline'
+                          }}
+                        </v-icon>
+                        <div>
+                          <div class="font-weight-medium">
+                            {{
+                              formData.paymentOption === 'pay_now'
+                                ? 'Bayar Sekarang'
+                                : 'Bayar Nanti'
+                            }}
+                          </div>
+                          <div class="text-caption text-grey-darken-1">
+                            {{
+                              formData.paymentOption === 'pay_now'
+                                ? 'Invoice akan dibuat setelah submit'
+                                : 'Invoice akan dikirim setelah sertifikat selesai'
+                            }}
+                          </div>
+                        </div>
+                      </div>
+                    </v-card-text>
+                  </v-card>
+
+                  <!-- Payment Proof Upload (only for pay_now) -->
+                  <v-card
+                    v-if="formData.paymentOption === 'pay_now'"
+                    variant="outlined"
+                    class="mt-4"
+                  >
+                    <v-card-title class="bg-success-lighten-4">
+                      <v-icon class="me-2">mdi-file-upload</v-icon>
+                      Upload Bukti Transfer
+                    </v-card-title>
+                    <v-card-text>
+                      <v-alert
+                        type="error"
+                        variant="tonal"
+                        density="compact"
+                        icon="mdi-information"
+                        class="mb-4"
+                      >
+                        <strong>Penting:</strong> Bukti transfer akan dicek oleh tim admin SMY.
+                        Harap tunggu konfirmasi approval sebelum memulai pelatihan.
+                      </v-alert>
+
+                      <v-file-input
+                        v-model="formData.paymentProof"
+                        label="Upload Bukti Transfer *"
+                        variant="outlined"
+                        prepend-icon=""
+                        prepend-inner-icon="mdi-paperclip"
+                        accept="image/*,application/pdf"
+                        :rules="formData.paymentOption === 'pay_now' ? [rules.required] : []"
+                        hint="Upload gambar atau PDF bukti transfer. Max 5MB"
+                        persistent-hint
+                        show-size
+                      >
+                        <template #selection="{ fileNames }">
+                          <template v-for="(name, index) in fileNames" :key="name">
+                            <v-chip color="success" variant="tonal" size="small" label class="me-2">
+                              <v-icon start>mdi-file-check</v-icon>
+                              {{ name }}
+                            </v-chip>
+                          </template>
+                        </template>
+                      </v-file-input>
+
+                      <!-- Bank Transfer Information -->
+                      <v-card variant="tonal" color="info" class="mt-3">
+                        <v-card-text>
+                          <div class="text-subtitle-2 mb-2">
+                            <v-icon class="me-1">mdi-bank</v-icon>
+                            Informasi Transfer
+                          </div>
+                          <div class="text-body-2">
+                            <div><strong>Bank:</strong> BCA</div>
+                            <div><strong>No. Rekening:</strong> 0607749888</div>
+                            <div><strong>Atas Nama:</strong> PT SAMUDRA MARITIM YOGYAKARTA</div>
+                          </div>
+                        </v-card-text>
+                      </v-card>
+                      <v-card variant="tonal" color="warning" class="mt-3">
+                        <v-card-text>
+                          <div class="text-body-2">
+                            <div><strong>Bank:</strong> BNI</div>
+                            <div><strong>No. Rekening:</strong> 8118881158</div>
+                            <div><strong>Atas Nama:</strong> PT SAMUDRA MARITIM YOGYAKARTA</div>
+                          </div>
+                        </v-card-text>
+                      </v-card>
+                      <div class="mt-5">
+                        <strong>Total yang harus dibayar:</strong>
+                        <span class="text-success font-weight-bold">
+                          Rp {{ calculateTotalFee().toLocaleString('id-ID') }}
+                        </span>
+                      </div>
+                    </v-card-text>
+                  </v-card>
                 </v-col>
               </v-row>
             </v-card-text>
@@ -412,17 +562,13 @@
       <!-- Navigation Actions -->
       <v-card elevation="2">
         <v-card-actions class="pa-4">
-          <v-btn
-            v-if="currentStep > 1"
-            @click="previousStep"
-            :disabled="loading"
-          >
+          <v-btn v-if="currentStep > 1" @click="previousStep" :disabled="loading">
             <v-icon start>mdi-chevron-left</v-icon>
             Sebelumnya
           </v-btn>
-          
+
           <v-spacer />
-          
+
           <v-btn
             v-if="currentStep < stepperItems.length"
             color="primary"
@@ -432,7 +578,7 @@
             Selanjutnya
             <v-icon end>mdi-chevron-right</v-icon>
           </v-btn>
-          
+
           <v-btn
             v-if="currentStep === stepperItems.length"
             color="success"
@@ -455,37 +601,31 @@
           <h2 class="text-h5 mb-4">Peserta Berhasil Ditambahkan!</h2>
           <p class="text-body-1 mb-4">
             <span v-if="createdParticipant?.summary">
-              Berhasil mendaftarkan <strong>{{ createdParticipant.summary.totalPrograms }} program pelatihan</strong> 
-              dengan nomor registrasi dasar <strong>{{ createdParticipant.summary.registrationNumber }}</strong>
-              <br>
+              Berhasil mendaftarkan
+              <strong>{{ createdParticipant.summary.totalPrograms }} program pelatihan</strong>
+              dengan nomor registrasi dasar
+              <strong>{{ createdParticipant.summary.registrationNumber }}</strong>
+              <br />
               <small class="text-grey-darken-1">
                 Program: {{ createdParticipant.summary.trainingPrograms.join(', ') }}
               </small>
             </span>
             <span v-else>
-              Data peserta untuk program <strong>{{ getTrainingProgramName(createdParticipant?.trainingProgram) }}</strong> telah berhasil disimpan dengan nomor registrasi 
+              Data peserta untuk program
+              <strong>{{ getTrainingProgramName(createdParticipant?.trainingProgram) }}</strong>
+              telah berhasil disimpan dengan nomor registrasi
               <strong>{{ createdParticipant?.registrationNumber }}</strong>
             </span>
           </p>
         </v-card-text>
         <v-card-actions class="pa-6 pt-0">
-          <v-btn
-            block
-            color="primary"
-            @click="goToParticipantList"
-          >
-            Lihat Daftar Peserta
-          </v-btn>
+          <v-btn block color="primary" @click="goToParticipantList"> Lihat Daftar Peserta </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
 
     <!-- Error Snackbar -->
-    <v-snackbar
-      v-model="errorSnackbar"
-      color="error"
-      timeout="5000"
-    >
+    <v-snackbar v-model="errorSnackbar" color="error" timeout="5000">
       {{ errorMessage }}
       <template #actions>
         <v-btn @click="errorSnackbar = false" icon="mdi-close" />
@@ -518,21 +658,23 @@ const formData = ref({
   fullName: '', // Nama lengkap peserta
   trainingPrograms: [], // Changed to array for multiple selection
   hasBSTCertificate: false, // Checkbox for BST certificate ownership
+  paymentOption: 'pay_later', // Default to pay later
+  paymentProof: null, // File for payment proof when pay_now is selected
   files: {
     ktp: null,
     ijazah: null,
     foto: null,
     surat_sehat: null,
     passport: null,
-    sertifikat_bst: null
-  }
+    sertifikat_bst: null,
+  },
 })
 
 // Stepper configuration
 const stepperItems = [
   { title: 'Jenis Diklat', value: 1 },
   { title: 'Upload Dokumen', value: 2 },
-  { title: 'Konfirmasi', value: 3 }
+  { title: 'Konfirmasi', value: 3 },
 ]
 
 // Computed
@@ -543,49 +685,51 @@ const trainingProgramOptions = computed(() => {
   return Object.entries(trainingTypes.value).map(([key, value]) => ({
     value: key,
     text: value.name,
-    description: value.description
+    description: value.description,
   }))
 })
 
 const selectedTrainingTypes = computed(() => {
   if (!formData.value.trainingPrograms || !trainingTypes.value) return []
-  return formData.value.trainingPrograms.map(program => ({
+  return formData.value.trainingPrograms.map((program) => ({
     key: program,
-    ...trainingTypes.value[program]
+    ...trainingTypes.value[program],
   }))
 })
 
 const requiredDocuments = computed(() => {
   if (!selectedTrainingTypes.value.length) return []
-  
+
   // Collect all required documents from selected training programs
   const allDocs = new Set()
-  selectedTrainingTypes.value.forEach(training => {
-    training.requiredDocuments?.forEach(doc => {
+  selectedTrainingTypes.value.forEach((training) => {
+    training.requiredDocuments?.forEach((doc) => {
       // Skip sertifikat_bst from automatic inclusion - we'll handle it separately
       if (doc !== 'sertifikat_bst') {
         allDocs.add(doc)
       }
     })
   })
-  
+
   // Add BST certificate if user confirms they have it and any selected program needs it
   if (formData.value.hasBSTCertificate && needsBSTCertificateUpload.value) {
     allDocs.add('sertifikat_bst')
   }
-  
+
   return Array.from(allDocs)
 })
 
 const hasBasicTraining = computed(() => {
-  return formData.value.trainingPrograms.includes('BST') || 
-         formData.value.trainingPrograms.includes('UPDATING_BST')
+  return (
+    formData.value.trainingPrograms.includes('BST') ||
+    formData.value.trainingPrograms.includes('UPDATING_BST')
+  )
 })
 
 const needsBSTCertificateUpload = computed(() => {
   // Programs that require BST certificate (excluding BST itself as it creates new certificate)
   const programsNeedingBST = ['SAT', 'CCM_CMHBT', 'CCM_CMT', 'SDSD', 'PSCRB', 'UPDATING_BST']
-  return formData.value.trainingPrograms.some(program => programsNeedingBST.includes(program))
+  return formData.value.trainingPrograms.some((program) => programsNeedingBST.includes(program))
 })
 
 const showBSTCheckbox = computed(() => {
@@ -595,7 +739,8 @@ const showBSTCheckbox = computed(() => {
 const canProceedToNext = computed(() => {
   switch (currentStep.value) {
     case 1:
-      const hasPrograms = formData.value.trainingPrograms && formData.value.trainingPrograms.length > 0
+      const hasPrograms =
+        formData.value.trainingPrograms && formData.value.trainingPrograms.length > 0
       // If BST checkbox is shown, it must be checked to proceed
       const bstConfirmed = !showBSTCheckbox.value || formData.value.hasBSTCertificate
       return hasPrograms && bstConfirmed
@@ -609,7 +754,10 @@ const canProceedToNext = computed(() => {
 const canSubmit = computed(() => {
   const hasPrograms = formData.value.trainingPrograms && formData.value.trainingPrograms.length > 0
   const bstConfirmed = !showBSTCheckbox.value || formData.value.hasBSTCertificate
-  return hasPrograms && bstConfirmed && documentsValid.value
+  const hasPaymentProof =
+    formData.value.paymentOption === 'pay_later' ||
+    (formData.value.paymentOption === 'pay_now' && formData.value.paymentProof)
+  return hasPrograms && bstConfirmed && documentsValid.value && hasPaymentProof
 })
 
 // Validation rules
@@ -629,13 +777,13 @@ const rules = {
   },
   requiredBSTConfirmation: (value) => {
     return !!value || 'Anda harus mengkonfirmasi kepemilikan Sertifikat BST untuk melanjutkan'
-  }
+  },
 }
 
 // Methods
 const removeTrainingProgram = (programToRemove) => {
   formData.value.trainingPrograms = formData.value.trainingPrograms.filter(
-    program => program !== programToRemove
+    (program) => program !== programToRemove,
   )
 }
 
@@ -647,7 +795,7 @@ const onTrainingProgramChange = () => {
     foto: null,
     surat_sehat: null,
     passport: null,
-    sertifikat_bst: null
+    sertifikat_bst: null,
   }
   // Reset BST certificate checkbox
   formData.value.hasBSTCertificate = false
@@ -656,10 +804,10 @@ const onTrainingProgramChange = () => {
 
 const validateFileSize = (files) => {
   if (!files || files.length === 0) return
-  
+
   const file = files[0]
   const maxSize = 30 * 1024 * 1024 // 3MB
-  
+
   if (file.size > maxSize) {
     errorMessage.value = `File ${file.name} terlalu besar. Maksimal 3MB.`
     errorSnackbar.value = true
@@ -682,9 +830,9 @@ const previousStep = () => {
 
 const submitForm = async () => {
   if (!canSubmit.value) return
-  
+
   loading.value = true
-  
+
   try {
     const result = await participantStore.createAgencySubmission(formData.value)
     createdParticipant.value = result
@@ -703,7 +851,7 @@ const goToParticipantList = () => {
 
 const getUploadedFiles = () => {
   const uploaded = {}
-  Object.keys(formData.value.files).forEach(key => {
+  Object.keys(formData.value.files).forEach((key) => {
     if (formData.value.files[key] && formData.value.files[key].length > 0) {
       uploaded[key] = formData.value.files[key]
     }
@@ -721,7 +869,7 @@ const getTrainingChipColor = (program) => {
     SDSD: 'orange',
     PSCRB: 'cyan',
     SB: 'teal',
-    UPDATING_BST: 'amber'
+    UPDATING_BST: 'amber',
   }
   return colors[program] || 'grey'
 }
@@ -738,9 +886,25 @@ const getDocumentName = (docType) => {
     surat_sehat: 'Surat Sehat',
     passport: 'Passport',
     passport_optional: 'Passport (Opsional)',
-    sertifikat_bst: 'Sertifikat BST'
+    sertifikat_bst: 'Sertifikat BST',
   }
   return names[docType] || docType
+}
+
+const calculateTotalFee = () => {
+  if (!trainingTypes.value || !formData.value.trainingPrograms.length) {
+    return 0
+  }
+
+  let total = 0
+  formData.value.trainingPrograms.forEach((program) => {
+    const trainingType = trainingTypes.value[program]
+    if (trainingType && trainingType.fee) {
+      total += trainingType.fee
+    }
+  })
+
+  return total
 }
 
 const formatDate = (date) => {
@@ -759,42 +923,57 @@ onMounted(async () => {
 })
 
 // Watch for file changes to update validation
-watch(() => formData.value.files, () => {
-  nextTick(() => {
-    checkDocumentsValidation()
-  })
-}, { deep: true })
+watch(
+  () => formData.value.files,
+  () => {
+    nextTick(() => {
+      checkDocumentsValidation()
+    })
+  },
+  { deep: true },
+)
 
-watch(() => formData.value.trainingPrograms, () => {
-  nextTick(() => {
-    checkDocumentsValidation()
-  })
-}, { deep: true })
+watch(
+  () => formData.value.trainingPrograms,
+  () => {
+    nextTick(() => {
+      checkDocumentsValidation()
+    })
+  },
+  { deep: true },
+)
 
-watch(() => formData.value.hasBSTCertificate, () => {
-  nextTick(() => {
-    checkDocumentsValidation()
-  })
-})
+watch(
+  () => formData.value.hasBSTCertificate,
+  () => {
+    nextTick(() => {
+      checkDocumentsValidation()
+    })
+  },
+)
 
 const checkDocumentsValidation = () => {
-  if (!formData.value.trainingPrograms || !formData.value.trainingPrograms.length || !requiredDocuments.value.length) {
+  if (
+    !formData.value.trainingPrograms ||
+    !formData.value.trainingPrograms.length ||
+    !requiredDocuments.value.length
+  ) {
     documentsValid.value = false
     return
   }
-  
+
   let allValid = true
-  
+
   for (const docType of requiredDocuments.value) {
     if (docType === 'passport_optional') continue // Skip optional documents
-    
+
     const file = formData.value.files[docType === 'passport_optional' ? 'passport' : docType]
     if (!file || (Array.isArray(file) && file.length === 0)) {
       allValid = false
       break
     }
   }
-  
+
   documentsValid.value = allValid
 }
 </script>

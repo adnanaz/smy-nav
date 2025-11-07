@@ -210,12 +210,14 @@ const navigationItems = computed(() => {
   const baseItems = [
     { title: 'Dashboard', icon: 'mdi-view-dashboard', value: 'dashboard', to: '/dashboard' },
     { title: 'Participants', icon: 'mdi-account-group', value: 'participants', to: '/participants' },
+    { title: 'Invoices', icon: 'mdi-file-document-multiple', value: 'invoices', to: '/invoices' },
     { title: 'Documents', icon: 'mdi-file-document', value: 'documents', to: '/documents', disabled: true },
     { title: 'Progress', icon: 'mdi-progress-check', value: 'progress', to: '/progress', disabled: true },
   ]
 
   if (authStore.isAdmin) {
     baseItems.push(
+      { title: 'Admin Invoices', icon: 'mdi-file-document-check', value: 'admin-invoices', to: '/admin/invoices' },
       { title: 'Users', icon: 'mdi-account-multiple', value: 'users', to: '/users', disabled: true }
     )
   }

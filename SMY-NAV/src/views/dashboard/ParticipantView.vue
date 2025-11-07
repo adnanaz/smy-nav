@@ -144,15 +144,44 @@
             </v-chip>
           </template>
 
+          <!-- Agency (Admin only) -->
+          <template #item.agency.name="{ item }">
+            <div class="d-flex align-center">
+              <v-icon icon="mdi-domain" size="16" class="me-2 text-grey-darken-1" />
+              <div>
+                <div class="font-weight-medium">{{ item.agency?.name || 'N/A' }}</div>
+                <div class="text-caption text-grey-darken-1">{{ item.agency?.code || '' }}</div>
+              </div>
+            </div>
+          </template>
+
           <!-- Status -->
           <template #item.status="{ item }">
-            <v-chip
-              :color="getStatusColor(item.status)"
-              variant="tonal"
-              size="small"
-            >
-              {{ getStatusText(item.status) }}
-            </v-chip>
+            <div class="d-flex align-center">
+              <v-chip
+                :color="getStatusColor(item.status)"
+                variant="tonal"
+                size="small"
+              >
+                {{ getStatusText(item.status) }}
+              </v-chip>
+              <!-- Invoice badge for non-admin -->
+              <!-- <v-tooltip v-if="!authStore.isAdmin && item.documents?.invoice" location="top">
+                <template #activator="{ props }">
+                  <v-chip
+                    v-bind="props"
+                    size="x-small"
+                    color="success"
+                    variant="tonal"
+                    class="ml-1"
+                    @click="previewInvoice(item)"
+                  >
+                    <v-icon size="12">mdi-file-document</v-icon>
+                  </v-chip>
+                </template>
+                <span>Invoice tersedia - Klik untuk preview</span>
+              </v-tooltip> -->
+            </div>
           </template>
 
           <!-- Progress -->
@@ -170,6 +199,13 @@
             </div>
           </template>
 
+          <!-- Notes -->
+         <template #item.notes="{ item }">
+           <div class="text-caption">
+             {{ item.notes }}
+           </div>
+         </template>
+
           <!-- Created Date -->
           <template #item.createdAt="{ item }">
             <div class="text-caption">
@@ -185,7 +221,23 @@
                 variant="text"
                 size="small"
                 @click="viewParticipant(item)"
+                title="Lihat Detail"
               />
+              
+              <!-- Invoice button (for all users when invoice exists) -->
+              <v-tooltip v-if="item.documents?.invoice" location="top">
+                <template #activator="{ props }">
+                  <v-btn
+                    v-bind="props"
+                    icon="mdi-file-document"
+                    variant="text"
+                    size="small"
+                    color="success"
+                    @click="previewInvoice(item)"
+                  />
+                </template>
+                <span>Preview Invoice</span>
+              </v-tooltip>
               
               <!-- Agent actions - only for draft status -->
               <template v-if="authStore.isAgent">
@@ -219,6 +271,14 @@
 
               <!-- Admin actions - for verification process -->
               <template v-if="authStore.isAdmin">
+                <v-btn
+                  icon="mdi-chart-timeline-variant"
+                  variant="text"
+                  size="small"
+                  color="primary"
+                  @click="updateProgress(item)"
+                  title="Update Progress"
+                />
                 <v-btn
                   v-if="item.status === 'submitted'"
                   icon="mdi-check-circle"
@@ -263,6 +323,13 @@
     <!-- Edit Dialog -->
     <ParticipantEditDialog
       v-model="editDialog"
+      :participant="selectedParticipant"
+      @updated="handleParticipantUpdated"
+    />
+
+    <!-- Progress Dialog -->
+    <ParticipantProgressDialog
+      v-model="progressDialog"
       :participant="selectedParticipant"
       @updated="handleParticipantUpdated"
     />
@@ -334,6 +401,7 @@ import { useRouter } from 'vue-router'
 import DashboardLayout from '@/components/layout/DashboardLayout.vue'
 import ParticipantDetailDialog from '@/components/participants/ParticipantDetailDialog.vue'
 import ParticipantEditDialog from '@/components/participants/ParticipantEditDialog.vue'
+import ParticipantProgressDialog from '@/components/participants/ParticipantProgressDialog.vue'
 import { useParticipantStore } from '@/stores/participant'
 import { useAuthStore } from '@/stores/auth-simple'
 import { formatDistanceToNow, format } from 'date-fns'
@@ -347,6 +415,7 @@ const authStore = useAuthStore()
 const loading = ref(false)
 const detailDialog = ref(false)
 const editDialog = ref(false)
+const progressDialog = ref(false)
 const deleteDialog = ref(false)
 const deleteLoading = ref(false)
 const submitDialog = ref(false)
@@ -377,52 +446,75 @@ const snackbar = ref({
 const participants = computed(() => participantStore.participants)
 const trainingTypes = computed(() => participantStore.trainingTypes)
 
-// Table headers
-const headers = [
-  {
-    title: 'No. Registrasi',
-    key: 'registrationNumber',
-    sortable: true,
-    width: '150px'
-  },
-  {
-    title: 'Nama Lengkap',
-    key: 'fullName',
-    sortable: true,
-    width: '250px'
-  },
-  {
-    title: 'Jenis Diklat',
-    key: 'trainingProgram',
-    sortable: true,
-    width: '180px'
-  },
-  {
-    title: 'Status',
-    key: 'status',
-    sortable: true,
-    width: '120px'
-  },
-  {
-    title: 'Progress',
-    key: 'progressPercentage',
-    sortable: true,
-    width: '120px'
-  },
-  {
-    title: 'Tanggal Dibuat',
-    key: 'createdAt',
-    sortable: true,
-    width: '140px'
-  },
-  {
-    title: 'Aksi',
-    key: 'actions',
-    sortable: false,
-    width: '120px', 
-    align: 'center'
+// Table headers - computed to include agency column for admin
+const headers = computed(() => {
+  const baseHeaders = [
+    {
+      title: 'No. Registrasi',
+      key: 'registrationNumber',
+      sortable: true,
+      width: '150px'
+    },
+    {
+      title: 'Nama Lengkap',
+      key: 'fullName',
+      sortable: true,
+      width: '250px'
+    },
+    {
+      title: 'Jenis Diklat',
+      key: 'trainingProgram',
+      sortable: true,
+      width: '180px'
+    }
+  ]
+
+  // Add agency column for admin
+  if (authStore.isAdmin) {
+    baseHeaders.push({
+      title: 'Agensi',
+      key: 'agency.name',
+      sortable: true,
+      width: '180px'
+    })
   }
-]
+
+  baseHeaders.push(
+    {
+      title: 'Status',
+      key: 'status',
+      sortable: true,
+      width: '120px'
+    },
+    {
+      title: 'Progress',
+      key: 'progressPercentage',
+      sortable: true,
+      width: '120px'
+    },
+    {
+      title: 'Catatan',
+      key: 'notes',
+      sortable: false,
+      width: '200px'
+    },
+    {
+      title: 'Tanggal Dibuat',
+      key: 'createdAt',
+      sortable: true,
+      width: '140px'
+    },
+    {
+      title: 'Aksi',
+      key: 'actions',
+      sortable: false,
+      width: '160px', // Lebih lebar untuk menampung invoice button
+      align: 'center'
+    }
+  )
+
+  return baseHeaders
+})
 
 // Training program options for filter
 const trainingProgramOptions = computed(() => {
@@ -531,6 +623,11 @@ const editParticipant = (participant) => {
   editDialog.value = true
 }
 
+const updateProgress = (participant) => {
+  selectedParticipant.value = participant
+  progressDialog.value = true
+}
+
 const submitParticipant = (participant) => {
   selectedParticipant.value = participant
   submitDialog.value = true
@@ -596,9 +693,32 @@ const handleParticipantSaved = () => {
   fetchParticipants()
 }
 
-const handleParticipantUpdated = () => {
+const handleParticipantUpdated = async () => {
   showSnackbar('Data peserta berhasil diupdate', 'success')
-  fetchParticipants()
+  
+  // Store the current selected participant ID
+  const selectedId = selectedParticipant.value?.id
+  
+  // Refresh the participants list
+  await fetchParticipants()
+  
+  // Update selectedParticipant with fresh data from the updated list
+  if (selectedId) {
+    const updatedParticipant = participants.value.find(p => p.id === selectedId)
+    if (updatedParticipant) {
+      selectedParticipant.value = updatedParticipant
+    } else {
+      // If not found in current page, fetch individual participant
+      try {
+        const response = await participantStore.fetchParticipantById(selectedId)
+        if (response.success) {
+          selectedParticipant.value = response.data.participant
+        }
+      } catch (error) {
+        console.error('Failed to fetch updated participant:', error)
+      }
+    }
+  }
 }
 
 const handlePageChange = (page) => {
@@ -686,6 +806,14 @@ const getProgressColor = (percentage) => {
 const formatDate = (date) => {
   if (!date) return '-'
   return format(new Date(date), 'dd MMM yyyy', { locale: idLocale })
+}
+
+const previewInvoice = (participant) => {
+  if (participant.documents?.invoice?.url) {
+    window.open(participant.documents.invoice.url, '_blank')
+  } else {
+    showSnackbar('Invoice tidak ditemukan', 'warning')
+  }
 }
 
 // Lifecycle
