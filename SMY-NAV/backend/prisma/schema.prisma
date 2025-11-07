@@ -43,6 +43,11 @@ enum BatchStatus {
   cancelled
 }
 
+enum PaymentOption {
+  pay_now
+  pay_later
+}
+
 // Models
 model Agency {
   id               String        @id @default(uuid()) @db.Uuid
@@ -118,6 +123,10 @@ model Participant {
   
   // Documents stored as JSON (simpler approach)
   documents            Json?             @db.JsonB
+  
+  // Payment Information
+  paymentOption        PaymentOption?    @map("payment_option")
+  paymentProof         Json?             @map("payment_proof") @db.JsonB // Store payment proof document info
   
   // Timestamps
   submittedAt          DateTime?         @map("submitted_at") @db.Timestamptz

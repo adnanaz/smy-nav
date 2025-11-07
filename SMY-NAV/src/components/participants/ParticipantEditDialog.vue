@@ -230,6 +230,172 @@
                 @change="validateFileSize"
               />
             </v-col>
+
+            <!-- Payment Information (Only for draft status) -->
+            <template v-if="participant.status === 'draft'">
+              <v-col cols="12">
+                <v-divider class="my-4" />
+                <h6 class="text-h6 mb-4">
+                  <v-icon class="me-2">mdi-credit-card</v-icon>
+                  Informasi Pembayaran
+                </h6>
+                <v-alert type="info" variant="tonal" class="mb-4">
+                  Update pilihan pembayaran hanya tersedia untuk data dengan status Draft
+                </v-alert>
+              </v-col>
+              
+              <v-col cols="12">
+                <v-radio-group
+                  v-model="formData.paymentOption"
+                  label="Pilihan Pembayaran"
+                >
+                  <v-radio
+                    label="Bayar Sekarang"
+                    value="pay_now"
+                    color="success"
+                  >
+                    <template #label>
+                      <div class="d-flex align-center">
+                        <v-icon color="success" class="me-2">mdi-cash-multiple</v-icon>
+                        <span class="text-body-1 font-weight-medium">Bayar Sekarang</span>
+                      </div>
+                    </template>
+                  </v-radio>
+                  
+                  <v-radio
+                    label="Bayar Nanti"
+                    value="pay_later"
+                    color="orange"
+                  >
+                    <template #label>
+                      <div class="d-flex align-center">
+                        <v-icon color="orange" class="me-2">mdi-clock-outline</v-icon>
+                        <span class="text-body-1 font-weight-medium">Bayar Nanti</span>
+                      </div>
+                    </template>
+                  </v-radio>
+                </v-radio-group>
+              </v-col>
+
+              <!-- Cost Information -->
+              <v-col v-if="formData.trainingProgram && formData.paymentOption" cols="12">
+                <v-card variant="outlined" class="mb-4">
+                  <v-card-title class="bg-blue-lighten-5">
+                    <v-icon class="me-2">mdi-calculator</v-icon>
+                    Rincian Biaya
+                  </v-card-title>
+                  <v-card-text>
+                    <v-row>
+                      <v-col cols="12" md="8">
+                        <div class="d-flex justify-space-between align-center">
+                          <div>
+                            <span class="text-h6">{{ trainingProgramOptions.find(opt => opt.value === formData.trainingProgram)?.title || formData.trainingProgram }}</span>
+                          </div>
+                          <div class="text-right">
+                            <span class="text-h5 font-weight-bold text-primary">
+                              {{ formatCurrency(totalCost) }}
+                            </span>
+                          </div>
+                        </div>
+                      </v-col>
+                    </v-row>
+                    <v-divider class="my-3" />
+                    <div class="d-flex justify-space-between align-center">
+                      <span class="text-h6 font-weight-bold">Total Biaya:</span>
+                      <span class="text-h5 font-weight-bold text-success">
+                        {{ formatCurrency(totalCost) }}
+                      </span>
+                    </div>
+                  </v-card-text>
+                </v-card>
+              </v-col>
+
+              <!-- Bank Transfer Info for Pay Now -->
+              <v-col v-if="formData.paymentOption === 'pay_now'" cols="12">
+                <v-card variant="outlined">
+                  <v-card-title class="bg-success-lighten-4">
+                    <v-icon class="me-1">mdi-bank</v-icon>
+                    Informasi Transfer Bank
+                  </v-card-title>
+                  <v-card-text>
+                    <div class="mb-3 d-flex align-center">
+                      <v-alert class="me-6" 
+                        type="info" 
+                        variant="tonal" 
+                        density="compact"
+                        icon="mdi-bank-transfer">
+                       <strong>Bank:</strong> BCA (Bank Central Asia)<br>
+                        <strong>No. Rekening : </strong>0607749888<br>
+                        <strong>Atas Nama :</strong>  PT SAMUDRA MARITIM YOGYAKARTA
+                      </v-alert>
+                      <v-alert 
+                        type="warning" 
+                        variant="tonal" 
+                        density="compact"
+                        icon="mdi-bank-transfer"
+                       class="me-6">
+                       <strong>Bank:</strong> BNI (Bank Negara Indonesia)<br>
+                        <strong>No. Rekening : </strong>8118881158<br>
+                        <strong>Atas Nama :</strong>  PT SAMUDRA MARITIM YOGYAKARTA
+                      </v-alert>
+                    </div>
+                    
+                    <!-- Show existing payment proof if available -->
+                    <div v-if="participant.paymentProof" class="mb-3">
+                      <v-alert type="success" variant="tonal" density="compact" icon="mdi-check">
+                        <strong>Bukti transfer sudah ada:</strong> {{ participant.paymentProof.original_filename }}
+                        <v-btn 
+                          :href="participant.paymentProof.url" 
+                          target="_blank" 
+                          size="small" 
+                          color="success" 
+                          variant="text"
+                          class="ml-2"
+                        >
+                          Lihat
+                        </v-btn>
+                      </v-alert>
+                    </div>
+
+                    <!-- Upload Payment Proof -->
+                    <v-file-input
+                      v-model="formData.files.payment_proof"
+                      :label="participant.paymentProof ? 'Ganti Bukti Transfer' : 'Upload Bukti Transfer'"
+                      variant="outlined"
+                      accept="image/*,.pdf"
+                      prepend-icon="mdi-receipt"
+                      show-size
+                      @change="validateFileSize"
+                      :hint="participant.paymentProof ? 'Upload file baru untuk mengganti bukti transfer yang ada' : 'Upload bukti transfer bank'"
+                      persistent-hint
+                    />
+                  </v-card-text>
+                </v-card>
+              </v-col>
+
+              <!-- Pay Later Info -->
+              <v-col v-if="formData.paymentOption === 'pay_later'" cols="12">
+                <v-card variant="outlined">
+                  <v-card-title class="bg-orange-lighten-4">
+                    <v-icon class="me-2">mdi-information</v-icon>
+                    Informasi Bayar Nanti
+                  </v-card-title>
+                  <v-card-text>
+                    <v-alert 
+                      type="info" 
+                      variant="tonal" 
+                      density="compact"
+                      icon="mdi-clock-outline"
+                    >
+                      <strong>Ketentuan Bayar Nanti:</strong><br>
+                      • Anda akan diminta untuk melakukan pembayaran ketika sertifikat sudah jadi<br>
+                      • Sertifikat akan diberikan setelah pembayaran lunas<br>
+                      • Tim kami akan menghubungi Anda untuk konfirmasi pembayaran
+                    </v-alert>
+                  </v-card-text>
+                </v-card>
+              </v-col>
+            </template>
           </v-row>
         </v-card-text>
 
@@ -304,13 +470,15 @@ const formData = ref({
   address: '',
   trainingProgram: '',
   registrationNumber: '',
+  paymentOption: null, // pay_now or pay_later
   files: {
     ktp: null,
     ijazah: null,
     foto: null,
     surat_sehat: null,
     passport: null,
-    sertifikat_bst: null
+    sertifikat_bst: null,
+    payment_proof: null
   }
 })
 
@@ -327,6 +495,32 @@ const trainingProgramOptions = computed(() => {
     value: key
   }))
 })
+
+// Training prices
+const trainingPrices = {
+  'bst': 1850000,      // BST: 1jt 850rb
+  'sat': 950000,       // SAT: 950rb
+  'ccm_cmt': 650000,   // CCM-CMT: 650rb
+  'ccm_cmhbt': 650000, // CCM-CMHBT: 650rb
+  'sdsd': 950000,      // SDSD: 950rb
+  'pscrb': 1200000     // PSCRB: 1jt 200rb
+}
+
+// Computed total cost
+const totalCost = computed(() => {
+  if (!formData.value.trainingProgram) return 0
+  return trainingPrices[formData.value.trainingProgram] || 0
+})
+
+// Format currency function
+const formatCurrency = (amount) => {
+  return new Intl.NumberFormat('id-ID', {
+    style: 'currency',
+    currency: 'IDR',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0
+  }).format(amount)
+}
 
 // Validation rules
 const rules = {
@@ -355,13 +549,15 @@ const populateForm = (participant) => {
       address: '',
       trainingProgram: participant.trainingProgram || '',
       registrationNumber: participant.registrationNumber || '',
+      paymentOption: participant.paymentOption || null,
       files: {
         ktp: null,
         ijazah: null,
         foto: null,
         surat_sehat: null,
         passport: null,
-        sertifikat_bst: null
+        sertifikat_bst: null,
+        payment_proof: null
       }
     }
   } else {
@@ -377,13 +573,15 @@ const populateForm = (participant) => {
       address: participant.address || '',
       trainingProgram: participant.trainingProgram || '',
       registrationNumber: participant.registrationNumber || '',
+      paymentOption: participant.paymentOption || null,
       files: {
         ktp: null,
         ijazah: null,
         foto: null,
         surat_sehat: null,
         passport: null,
-        sertifikat_bst: null
+        sertifikat_bst: null,
+        payment_proof: null
       }
     }
   }
@@ -416,11 +614,17 @@ const submitForm = async () => {
     let dataToSubmit = { ...formData.value }
     
     if (authStore.isAgent) {
-      // Agent bisa update nama lengkap dan file saja
+      // Agent bisa update nama lengkap, payment option (hanya untuk draft), dan file
       dataToSubmit = {
         fullName: formData.value.fullName,
         files: formData.value.files
       }
+      
+      // Agent bisa update payment hanya jika status draft
+      if (props.participant.status === 'draft') {
+        dataToSubmit.paymentOption = formData.value.paymentOption
+      }
+      
       // Hapus field yang null/undefined untuk agent
       Object.keys(dataToSubmit).forEach(key => {
         if (key !== 'files' && (dataToSubmit[key] === null || dataToSubmit[key] === '' || dataToSubmit[key] === undefined)) {
@@ -429,6 +633,11 @@ const submitForm = async () => {
       })
     } else {
       // Admin bisa update semua field
+      // Admin juga bisa update payment hanya jika status draft
+      if (props.participant.status !== 'draft') {
+        delete dataToSubmit.paymentOption
+      }
+      
       // Hapus field yang null/undefined
       Object.keys(dataToSubmit).forEach(key => {
         if (key !== 'files' && (dataToSubmit[key] === null || dataToSubmit[key] === '' || dataToSubmit[key] === undefined)) {

@@ -183,6 +183,12 @@
                     <div class="mb-3">
                       <strong>Proses Pembuatan Dokumen:</strong> {{ training.processingTime }}
                     </div>
+                    <div class="mb-3">
+                      <strong>Biaya:</strong> 
+                      <v-chip color="success" variant="tonal" size="small" class="ml-2">
+                        {{ formatCurrency(trainingPrices[training.key] || 0) }}
+                      </v-chip>
+                    </div>
                   </v-card-text>
                 </v-card>
 
@@ -238,6 +244,25 @@
                           <v-icon v-if="doc === 'passport_optional'" end size="small">mdi-help-circle</v-icon>
                         </v-chip>
                       </v-chip-group>
+                    </div>
+
+                    <!-- Total Cost Summary -->
+                    <v-divider class="my-4" />
+                    <div class="d-flex justify-space-between align-center">
+                      <div>
+                        <strong class="text-h6">Total Biaya:</strong>
+                        <div class="text-caption text-grey-darken-1">
+                          {{ formData.trainingPrograms.length }} program diklat
+                        </div>
+                      </div>
+                      <div class="text-right">
+                        <div class="text-h5 font-weight-bold text-success">
+                          {{ formatCurrency(totalCost) }}
+                        </div>
+                        <div class="text-caption text-grey-darken-1">
+                          Per peserta
+                        </div>
+                      </div>
                     </div>
                   </v-card-text>
                 </v-card>
@@ -348,6 +373,174 @@
           <template #item.3>
             <v-card-text class="pa-6">
               <h3 class="text-h6 mb-4">
+                <v-icon class="me-2">mdi-credit-card</v-icon>
+                Pilihan Pembayaran
+              </h3>
+              
+              <v-alert
+                type="info"
+                variant="tonal"
+                class="mb-4"
+              >
+                Pilih metode pembayaran untuk biaya pelatihan. Pembayaran dapat dilakukan sekarang atau nanti ketika sertifikat sudah jadi.
+              </v-alert>
+
+              <!-- Total Cost Display -->
+              <v-card variant="outlined" class="mb-4">
+                <v-card-title class="bg-blue-lighten-5">
+                  <v-icon class="me-2">mdi-calculator</v-icon>
+                  Rincian Biaya
+                </v-card-title>
+                <v-card-text>
+                  <div v-for="program in formData.trainingPrograms" :key="program" class="d-flex justify-space-between align-center mb-2">
+                    <div class="d-flex align-center">
+                      <v-chip
+                        :color="getTrainingChipColor(program)"
+                        variant="tonal"
+                        size="small"
+                        class="me-2"
+                      >
+                        {{ program }}
+                      </v-chip>
+                      <span>{{ getTrainingProgramName(program) }}</span>
+                    </div>
+                    <span class="font-weight-medium">{{ formatCurrency(trainingPrices[program] || 0) }}</span>
+                  </div>
+                  <v-divider class="my-3" />
+                  <div class="d-flex justify-space-between align-center">
+                    <strong class="text-h6">Total Pembayaran:</strong>
+                    <strong class="text-h5 text-success">{{ formatCurrency(totalCost) }}</strong>
+                  </div>
+                </v-card-text>
+              </v-card>
+
+              <!-- Payment Options -->
+              <v-row>
+                <v-col cols="12">
+                  <v-radio-group
+                    v-model="formData.paymentOption"
+                    :rules="[rules.required]"
+                  >
+                    <v-radio
+                      label="Bayar Sekarang"
+                      value="pay_now"
+                      color="success"
+                    >
+                      <template #label>
+                        <div class="d-flex align-center">
+                          <v-icon color="success" class="me-2">mdi-cash-multiple</v-icon>
+                          <span class="text-body-1 font-weight-medium">Bayar Sekarang</span>
+                        </div>
+                      </template>
+                    </v-radio>
+                    
+                    <v-radio
+                      label="Bayar Nanti"
+                      value="pay_later"
+                      color="orange"
+                    >
+                      <template #label>
+                        <div class="d-flex align-center">
+                          <v-icon color="orange" class="me-2">mdi-clock-outline</v-icon>
+                          <span class="text-body-1 font-weight-medium">Bayar Nanti</span>
+                        </div>
+                      </template>
+                    </v-radio>
+                  </v-radio-group>
+                </v-col>
+              </v-row>
+
+              <!-- Bank Transfer Info for Pay Now -->
+              <v-card v-if="formData.paymentOption === 'pay_now'" variant="outlined" class="mt-4">
+                <v-card-title class="bg-success-lighten-4">
+                  <v-icon class="me-1">mdi-bank</v-icon>
+                  Informasi Transfer Bank
+                </v-card-title>
+                <v-card-text>
+                  <div class="mb-3 d-flex align-center">
+                    <v-alert class="me-6" 
+                      type="info" 
+                      variant="tonal" 
+                      density="compact"
+                      icon="mdi-bank-transfer">
+                     <strong>Bank:</strong> BCA (Bank Central Asia)<br>
+                      <strong>No. Rekening : </strong>0607749888<br>
+                      <strong>Atas Nama :</strong>  PT SAMUDRA MARITIM YOGYAKARTA
+                    </v-alert>
+                    <v-alert 
+                      type="warning" 
+                      variant="tonal" 
+                      density="compact"
+                      icon="mdi-bank-transfer"
+                     class="me-6">
+                     <strong>Bank:</strong> BNI (Bank Negara Indonesia)<br>
+                      <strong>No. Rekening : </strong>8118881158<br>
+                      <strong>Atas Nama :</strong>  PT SAMUDRA MARITIM YOGYAKARTA
+                    </v-alert>
+                  </div>
+                  
+                  <v-alert 
+                    type="success" 
+                    variant="tonal" 
+                    density="compact"
+                    icon="mdi-cash"
+                    class="mb-3"
+                  >
+                    <strong>Total yang harus dibayar: {{ formatCurrency(totalCost) }}</strong><br>
+                    Silakan transfer sesuai nominal di atas ke salah satu rekening bank.
+                  </v-alert>
+                  
+                  <v-alert 
+                    type="error" 
+                    variant="tonal" 
+                    density="compact"
+                    icon="mdi-information"
+                    class="mb-3"
+                  >
+                    <strong>Penting:</strong> Pembayaran akan dicek oleh <b>Admin & Finance</b> setelah Anda mengupload bukti transfer.
+                  </v-alert>
+
+                  <!-- Upload Payment Proof -->
+                  <v-file-input
+                    v-model="formData.files.payment_proof"
+                    label="Upload Bukti Transfer *"
+                    variant="outlined"
+                    accept="image/*,.pdf"
+                    prepend-icon="mdi-receipt"
+                    show-size
+                    :rules="formData.paymentOption === 'pay_now' ? [rules.requiredFile] : []"
+                    @change="validateFileSize"
+                  />
+                </v-card-text>
+              </v-card>
+
+              <!-- Pay Later Info -->
+              <v-card v-if="formData.paymentOption === 'pay_later'" variant="outlined" class="mt-4">
+                <v-card-title class="bg-orange-lighten-4">
+                  <v-icon class="me-2">mdi-information</v-icon>
+                  Informasi Bayar Nanti
+                </v-card-title>
+                <v-card-text>
+                  <v-alert 
+                    type="info" 
+                    variant="tonal" 
+                    density="compact"
+                    icon="mdi-clock-outline"
+                    class="mt-3"
+                  >
+                    <strong>Ketentuan Bayar Nanti:</strong><br>
+                    • Anda akan diminta untuk melakukan pembayaran ketika sertifikat sudah jadi<br>
+                    • Sertifikat akan diberikan setelah pembayaran lunas<br>
+                    • Tim kami akan menghubungi Anda untuk konfirmasi pembayaran
+                  </v-alert>
+                </v-card-text>
+              </v-card>
+            </v-card-text>
+          </template>
+
+          <template #item.4>
+            <v-card-text class="pa-6">
+              <h3 class="text-h6 mb-4">
                 <v-icon class="me-2">mdi-check-circle</v-icon>
                 Konfirmasi Data
               </h3>
@@ -400,6 +593,55 @@
                           {{ getDocumentName(key) }}
                         </v-chip>
                       </v-chip-group>
+                    </v-card-text>
+                  </v-card>
+                </v-col>
+
+                <v-col cols="12" md="6">
+                  <v-card variant="outlined">
+                    <v-card-title class="bg-grey-lighten-4">Informasi Pembayaran</v-card-title>
+                    <v-card-text>
+                      <div class="mb-3">
+                        <strong>Total Biaya:</strong>
+                        <div class="text-h6 text-success font-weight-bold">{{ formatCurrency(totalCost) }}</div>
+                        <div class="text-caption text-grey-darken-1">
+                          {{ formData.trainingPrograms.length }} program diklat
+                        </div>
+                      </div>
+                      
+                      <div class="mb-3">
+                        <strong>Metode Pembayaran:</strong>
+                        <v-chip
+                          :color="formData.paymentOption === 'pay_now' ? 'success' : 'orange'"
+                          variant="tonal"
+                          size="small"
+                          class="ml-2"
+                        >
+                          {{ formData.paymentOption === 'pay_now' ? 'Bayar Sekarang' : 'Bayar Nanti' }}
+                        </v-chip>
+                      </div>
+                      
+                      <div v-if="formData.paymentOption === 'pay_now' && formData.files.payment_proof" class="mb-2">
+                        <v-alert 
+                          type="success" 
+                          variant="tonal" 
+                          density="compact"
+                          icon="mdi-check"
+                        >
+                          Bukti transfer telah diupload
+                        </v-alert>
+                      </div>
+                      
+                      <div v-if="formData.paymentOption === 'pay_later'" class="mb-2">
+                        <v-alert 
+                          type="info" 
+                          variant="tonal" 
+                          density="compact"
+                          icon="mdi-clock-outline"
+                        >
+                          Pembayaran akan dilakukan setelah sertifikat jadi
+                        </v-alert>
+                      </div>
                     </v-card-text>
                   </v-card>
                 </v-col>
@@ -518,13 +760,15 @@ const formData = ref({
   fullName: '', // Nama lengkap peserta
   trainingPrograms: [], // Changed to array for multiple selection
   hasBSTCertificate: false, // Checkbox for BST certificate ownership
+  paymentOption: null, // pay_now or pay_later
   files: {
     ktp: null,
     ijazah: null,
     foto: null,
     surat_sehat: null,
     passport: null,
-    sertifikat_bst: null
+    sertifikat_bst: null,
+    payment_proof: null
   }
 })
 
@@ -532,8 +776,21 @@ const formData = ref({
 const stepperItems = [
   { title: 'Jenis Diklat', value: 1 },
   { title: 'Upload Dokumen', value: 2 },
-  { title: 'Konfirmasi', value: 3 }
+  { title: 'Pembayaran', value: 3 },
+  { title: 'Konfirmasi', value: 4 }
 ]
+
+// Training program prices
+const trainingPrices = {
+  BST: 1850000,          // 1jt 850rb
+  SAT: 950000,           // 950rb
+  CCM_CMT: 650000,       // 650rb
+  CCM_CMHBT: 650000,     // 650rb
+  SDSD: 950000,          // 950rb
+  PSCRB: 1200000,        // 1jt 200rb
+  SB: 500000,            // Seaman Book (estimasi)
+  UPDATING_BST: 750000   // Updating BST (estimasi)
+}
 
 // Computed
 const trainingTypes = computed(() => participantStore.trainingTypes)
@@ -592,6 +849,26 @@ const showBSTCheckbox = computed(() => {
   return needsBSTCertificateUpload.value && !hasBasicTraining.value
 })
 
+// Calculate total cost
+const totalCost = computed(() => {
+  if (!formData.value.trainingPrograms || !formData.value.trainingPrograms.length) {
+    return 0
+  }
+  
+  return formData.value.trainingPrograms.reduce((total, program) => {
+    return total + (trainingPrices[program] || 0)
+  }, 0)
+})
+
+// Format currency
+const formatCurrency = (amount) => {
+  return new Intl.NumberFormat('id-ID', {
+    style: 'currency',
+    currency: 'IDR',
+    minimumFractionDigits: 0
+  }).format(amount)
+}
+
 const canProceedToNext = computed(() => {
   switch (currentStep.value) {
     case 1:
@@ -601,6 +878,20 @@ const canProceedToNext = computed(() => {
       return hasPrograms && bstConfirmed
     case 2:
       return documentsValid.value
+    case 3:
+      // Payment step validation
+      const hasPaymentOption = !!formData.value.paymentOption
+      if (formData.value.paymentOption === 'pay_now') {
+        // Check if payment proof is uploaded
+        const paymentProof = formData.value.files.payment_proof
+        const hasPaymentProof = paymentProof && (
+          (Array.isArray(paymentProof) && paymentProof.length > 0) ||
+          (!Array.isArray(paymentProof) && paymentProof)
+        )
+        return hasPaymentOption && hasPaymentProof
+      } else {
+        return hasPaymentOption
+      }
     default:
       return false
   }
@@ -609,7 +900,21 @@ const canProceedToNext = computed(() => {
 const canSubmit = computed(() => {
   const hasPrograms = formData.value.trainingPrograms && formData.value.trainingPrograms.length > 0
   const bstConfirmed = !showBSTCheckbox.value || formData.value.hasBSTCertificate
-  return hasPrograms && bstConfirmed && documentsValid.value
+  const hasPaymentOption = !!formData.value.paymentOption
+  
+  // Check payment validation
+  let paymentValid = false
+  if (formData.value.paymentOption === 'pay_later') {
+    paymentValid = true
+  } else if (formData.value.paymentOption === 'pay_now') {
+    const paymentProof = formData.value.files.payment_proof
+    paymentValid = paymentProof && (
+      (Array.isArray(paymentProof) && paymentProof.length > 0) ||
+      (!Array.isArray(paymentProof) && paymentProof)
+    )
+  }
+  
+  return hasPrograms && bstConfirmed && documentsValid.value && hasPaymentOption && paymentValid
 })
 
 // Validation rules
@@ -704,8 +1009,14 @@ const goToParticipantList = () => {
 const getUploadedFiles = () => {
   const uploaded = {}
   Object.keys(formData.value.files).forEach(key => {
-    if (formData.value.files[key] && formData.value.files[key].length > 0) {
-      uploaded[key] = formData.value.files[key]
+    const file = formData.value.files[key]
+    // Check if file exists - handle both array and direct file formats
+    const hasFile = file && (
+      (Array.isArray(file) && file.length > 0) ||
+      (!Array.isArray(file) && file)
+    )
+    if (hasFile) {
+      uploaded[key] = file
     }
   })
   return uploaded
@@ -738,7 +1049,8 @@ const getDocumentName = (docType) => {
     surat_sehat: 'Surat Sehat',
     passport: 'Passport',
     passport_optional: 'Passport (Opsional)',
-    sertifikat_bst: 'Sertifikat BST'
+    sertifikat_bst: 'Sertifikat BST',
+    payment_proof: 'Bukti Transfer'
   }
   return names[docType] || docType
 }

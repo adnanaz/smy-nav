@@ -173,6 +173,9 @@ export const useParticipantStore = defineStore('participant', () => {
       
       // Add BST certificate confirmation
       formData.append('hasBSTCertificate', submissionData.hasBSTCertificate || false)
+      
+      // Add payment option
+      formData.append('paymentOption', submissionData.paymentOption)
 
       // Add files
       if (submissionData.files) {
@@ -409,6 +412,228 @@ export const useParticipantStore = defineStore('participant', () => {
     return updateParticipant(id, progressData)
   }
 
+  // Progress management methods for admin
+  const verifyParticipant = async (id) => {
+    loading.value = true
+    error.value = null
+    
+    try {
+      const authStore = useAuthStore()
+      const token = authStore.token
+
+      const response = await axios.post(
+        `${API_BASE_URL}/participants/${id}/verify`,
+        {},
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      )
+
+      if (response.data.success) {
+        // Update local participant data
+        const index = participants.value.findIndex(p => p.id === id)
+        if (index !== -1) {
+          participants.value[index] = { ...participants.value[index], ...response.data.data }
+        }
+        return response.data.data
+      } else {
+        throw new Error(response.data.error?.message || 'Failed to verify participant')
+      }
+    } catch (err) {
+      error.value = err.response?.data?.error?.message || err.message
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  const rejectParticipant = async (id, reason = '') => {
+    loading.value = true
+    error.value = null
+    
+    try {
+      const authStore = useAuthStore()
+      const token = authStore.token
+
+      const response = await axios.post(
+        `${API_BASE_URL}/participants/${id}/reject`,
+        { reason },
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      )
+
+      if (response.data.success) {
+        // Update local participant data
+        const index = participants.value.findIndex(p => p.id === id)
+        if (index !== -1) {
+          participants.value[index] = { ...participants.value[index], ...response.data.data }
+        }
+        return response.data.data
+      } else {
+        throw new Error(response.data.error?.message || 'Failed to reject participant')
+      }
+    } catch (err) {
+      error.value = err.response?.data?.error?.message || err.message
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  const assignToBatch = async (id) => {
+    loading.value = true
+    error.value = null
+    
+    try {
+      const authStore = useAuthStore()
+      const token = authStore.token
+
+      const response = await axios.post(
+        `${API_BASE_URL}/participants/${id}/assign-batch`,
+        {},
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      )
+
+      if (response.data.success) {
+        // Update local participant data
+        const index = participants.value.findIndex(p => p.id === id)
+        if (index !== -1) {
+          participants.value[index] = { ...participants.value[index], ...response.data.data }
+        }
+        return response.data.data
+      } else {
+        throw new Error(response.data.error?.message || 'Failed to assign to batch')
+      }
+    } catch (err) {
+      error.value = err.response?.data?.error?.message || err.message
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  const sendBatchToCenter = async (batchId) => {
+    loading.value = true
+    error.value = null
+    
+    try {
+      const authStore = useAuthStore()
+      const token = authStore.token
+
+      const response = await axios.post(
+        `${API_BASE_URL}/batches/${batchId}/send-to-center`,
+        {},
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      )
+
+      if (response.data.success) {
+        return response.data.data
+      } else {
+        throw new Error(response.data.error?.message || 'Failed to send batch to center')
+      }
+    } catch (err) {
+      error.value = err.response?.data?.error?.message || err.message
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  const confirmDispatch = async (id) => {
+    loading.value = true
+    error.value = null
+    
+    try {
+      const authStore = useAuthStore()
+      const token = authStore.token
+
+      const response = await axios.post(
+        `${API_BASE_URL}/participants/${id}/confirm-dispatch`,
+        {},
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      )
+
+      if (response.data.success) {
+        // Update local participant data
+        const index = participants.value.findIndex(p => p.id === id)
+        if (index !== -1) {
+          participants.value[index] = { ...participants.value[index], ...response.data.data }
+        }
+        return response.data.data
+      } else {
+        throw new Error(response.data.error?.message || 'Failed to confirm dispatch')
+      }
+    } catch (err) {
+      error.value = err.response?.data?.error?.message || err.message
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  const completeParticipant = async (id) => {
+    loading.value = true
+    error.value = null
+    
+    try {
+      const authStore = useAuthStore()
+      const token = authStore.token
+
+      const response = await axios.post(
+        `${API_BASE_URL}/participants/${id}/complete`,
+        {},
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      )
+
+      if (response.data.success) {
+        // Update local participant data
+        const index = participants.value.findIndex(p => p.id === id)
+        if (index !== -1) {
+          participants.value[index] = { ...participants.value[index], ...response.data.data }
+        }
+        return response.data.data
+      } else {
+        throw new Error(response.data.error?.message || 'Failed to complete participant')
+      }
+    } catch (err) {
+      error.value = err.response?.data?.error?.message || err.message
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  const updateParticipantNotes = async (id, notes) => {
+    return updateParticipant(id, { notes })
+  }
+
   // Clear store data
   const clearParticipants = () => {
     participants.value = []
@@ -444,6 +669,17 @@ export const useParticipantStore = defineStore('participant', () => {
     fetchTrainingTypes,
     updateParticipantStatus,
     updateParticipantProgress,
+    
+    // Progress management
+    verifyParticipant,
+    rejectParticipant,
+    assignToBatch,
+    sendBatchToCenter,
+    confirmDispatch,
+    completeParticipant,
+    updateParticipantNotes,
+    
+    // Utilities
     clearParticipants,
     clearError
   }

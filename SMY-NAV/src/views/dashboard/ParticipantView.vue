@@ -144,6 +144,17 @@
             </v-chip>
           </template>
 
+          <!-- Agency (Admin only) -->
+          <template #item.agency.name="{ item }">
+            <div class="d-flex align-center">
+              <v-icon icon="mdi-domain" size="16" class="me-2 text-grey-darken-1" />
+              <div>
+                <div class="font-weight-medium">{{ item.agency?.name || 'N/A' }}</div>
+                <div class="text-caption text-grey-darken-1">{{ item.agency?.code || '' }}</div>
+              </div>
+            </div>
+          </template>
+
           <!-- Status -->
           <template #item.status="{ item }">
             <v-chip
@@ -170,6 +181,51 @@
             </div>
           </template>
 
+          <!-- Payment Option -->
+          <template #item.paymentOption="{ item }">
+            <div class="d-flex flex-column align-start">
+              <v-chip
+                v-if="item.paymentOption"
+                :color="getPaymentColor(item.paymentOption)"
+                variant="tonal"
+                size="small"
+                class="mb-1"
+              >
+                {{ getPaymentText(item.paymentOption) }}
+              </v-chip>
+              <div v-else class="text-caption text-grey">-</div>
+              
+              <!-- Payment Proof Indicator -->
+              <div v-if="item.paymentOption === 'pay_now'" class="mt-1">
+                <v-chip
+                  v-if="item.paymentProof"
+                  color="success"
+                  variant="outlined"
+                  size="x-small"
+                  prepend-icon="mdi-check"
+                >
+                  Invoice Terlampir
+                </v-chip>
+                <v-chip
+                  v-else
+                  color="warning"
+                  variant="outlined"
+                  size="x-small"
+                  prepend-icon="mdi-alert"
+                >
+                  Tidak ada Invoice Terlampir
+                </v-chip>
+              </div>
+            </div>
+          </template>
+
+          <!-- Notes -->
+         <template #item.notes="{ item }">
+           <div class="text-caption">
+             {{ item.notes }}
+           </div>
+         </template>
+
           <!-- Created Date -->
           <template #item.createdAt="{ item }">
             <div class="text-caption">
@@ -185,6 +241,18 @@
                 variant="text"
                 size="small"
                 @click="viewParticipant(item)"
+                title="Lihat Detail"
+              />
+              
+              <!-- Payment Proof View Button -->
+              <v-btn
+                v-if="item.paymentOption === 'pay_now' && item.paymentProof"
+                icon="mdi-invoice"
+                variant="text"
+                size="small"
+                color="success"
+                @click="viewPaymentProof(item)"
+                title="Lihat Bukti Transfer"
               />
               
               <!-- Agent actions - only for draft status -->
@@ -219,6 +287,14 @@
 
               <!-- Admin actions - for verification process -->
               <template v-if="authStore.isAdmin">
+                <v-btn
+                  icon="mdi-chart-timeline-variant"
+                  variant="text"
+                  size="small"
+                  color="primary"
+                  @click="updateProgress(item)"
+                  title="Update Progress"
+                />
                 <v-btn
                   v-if="item.status === 'submitted'"
                   icon="mdi-check-circle"
@@ -263,6 +339,13 @@
     <!-- Edit Dialog -->
     <ParticipantEditDialog
       v-model="editDialog"
+      :participant="selectedParticipant"
+      @updated="handleParticipantUpdated"
+    />
+
+    <!-- Progress Dialog -->
+    <ParticipantProgressDialog
+      v-model="progressDialog"
       :participant="selectedParticipant"
       @updated="handleParticipantUpdated"
     />
@@ -317,6 +400,64 @@
       </v-card>
     </v-dialog>
 
+    <!-- Payment Proof Dialog -->
+    <v-dialog v-model="paymentProofDialog" max-width="600">
+      <v-card>
+        <v-card-title class="text-h6 d-flex align-center">
+          <v-icon class="me-2" color="success">mdi-receipt</v-icon>
+          Bukti Transfer - {{ selectedParticipant?.fullName }}
+        </v-card-title>
+        <v-card-text>
+          <div v-if="selectedParticipant?.paymentProof" class="text-center">
+            <v-img
+              v-if="isImageFile(selectedParticipant.paymentProof)"
+              :src="selectedParticipant.paymentProof.url"
+              max-height="400"
+              contain
+              class="mb-3"
+            />
+            <div v-else class="pa-4">
+              <v-icon size="64" color="grey-lighten-1">mdi-file-pdf-box</v-icon>
+              <div class="text-h6 mt-2">{{ selectedParticipant.paymentProof.original_filename }}</div>
+              <div class="text-caption text-grey-darken-1">
+                Format: {{ selectedParticipant.paymentProof.format?.toUpperCase() }} 
+                | Size: {{ formatFileSize(selectedParticipant.paymentProof.bytes) }}
+              </div>
+            </div>
+            
+            <v-divider class="my-3" />
+            
+            <div class="text-left">
+              <strong>Informasi File:</strong><br>
+              <small>
+                <strong>Nama File:</strong> {{ selectedParticipant.paymentProof.original_filename }}<br>
+                <strong>Format:</strong> {{ selectedParticipant.paymentProof.format?.toUpperCase() }}<br>
+                <strong>Ukuran:</strong> {{ formatFileSize(selectedParticipant.paymentProof.bytes) }}
+              </small>
+            </div>
+          </div>
+          <div v-else>
+            <v-alert type="info" variant="tonal">
+              Tidak ada bukti transfer yang diupload.
+            </v-alert>
+          </div>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn
+            v-if="selectedParticipant?.paymentProof"
+            color="primary"
+            :href="selectedParticipant.paymentProof.url"
+            target="_blank"
+            prepend-icon="mdi-download"
+          >
+            Download
+          </v-btn>
+          <v-btn @click="paymentProofDialog = false">Tutup</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- Success Snackbar -->
     <v-snackbar
       v-model="snackbar.show"
@@ -334,6 +475,7 @@ import { useRouter } from 'vue-router'
 import DashboardLayout from '@/components/layout/DashboardLayout.vue'
 import ParticipantDetailDialog from '@/components/participants/ParticipantDetailDialog.vue'
 import ParticipantEditDialog from '@/components/participants/ParticipantEditDialog.vue'
+import ParticipantProgressDialog from '@/components/participants/ParticipantProgressDialog.vue'
 import { useParticipantStore } from '@/stores/participant'
 import { useAuthStore } from '@/stores/auth-simple'
 import { formatDistanceToNow, format } from 'date-fns'
@@ -347,10 +489,12 @@ const authStore = useAuthStore()
 const loading = ref(false)
 const detailDialog = ref(false)
 const editDialog = ref(false)
+const progressDialog = ref(false)
 const deleteDialog = ref(false)
 const deleteLoading = ref(false)
 const submitDialog = ref(false)
 const submitLoading = ref(false)
+const paymentProofDialog = ref(false)
 const selectedParticipant = ref(null)
 
 // Filters
@@ -377,52 +521,82 @@ const snackbar = ref({
 const participants = computed(() => participantStore.participants)
 const trainingTypes = computed(() => participantStore.trainingTypes)
 
-// Table headers
-const headers = [
-  {
-    title: 'No. Registrasi',
-    key: 'registrationNumber',
-    sortable: true,
-    width: '150px'
-  },
-  {
-    title: 'Nama Lengkap',
-    key: 'fullName',
-    sortable: true,
-    width: '250px'
-  },
-  {
-    title: 'Jenis Diklat',
-    key: 'trainingProgram',
-    sortable: true,
-    width: '180px'
-  },
-  {
-    title: 'Status',
-    key: 'status',
-    sortable: true,
-    width: '120px'
-  },
-  {
-    title: 'Progress',
-    key: 'progressPercentage',
-    sortable: true,
-    width: '120px'
-  },
-  {
-    title: 'Tanggal Dibuat',
-    key: 'createdAt',
-    sortable: true,
-    width: '140px'
-  },
-  {
-    title: 'Aksi',
-    key: 'actions',
-    sortable: false,
-    width: '120px', 
-    align: 'center'
+// Table headers - computed to include agency column for admin
+const headers = computed(() => {
+  const baseHeaders = [
+    {
+      title: 'No. Registrasi',
+      key: 'registrationNumber',
+      sortable: true,
+      width: '150px'
+    },
+    {
+      title: 'Nama Lengkap',
+      key: 'fullName',
+      sortable: true,
+      width: '250px'
+    },
+    {
+      title: 'Jenis Diklat',
+      key: 'trainingProgram',
+      sortable: true,
+      width: '180px'
+    }
+  ]
+
+  // Add agency column for admin
+  if (authStore.isAdmin) {
+    baseHeaders.push({
+      title: 'Agensi',
+      key: 'agency.name',
+      sortable: true,
+      width: '180px'
+    })
   }
-]
+
+  // Add remaining columns
+  baseHeaders.push(
+    {
+      title: 'Status',
+      key: 'status',
+      sortable: true,
+      width: '120px'
+    },
+    {
+      title: 'Progress',
+      key: 'progressPercentage',
+      sortable: true,
+      width: '120px'
+    },
+    {
+      title: 'Pembayaran',
+      key: 'paymentOption',
+      sortable: false,
+      width: '150px'
+    },
+    {
+      title: 'Catatan',
+      key: 'notes',
+      sortable: false,
+      width: '200px'
+    },
+    {
+      title: 'Tanggal Dibuat',
+      key: 'createdAt',
+      sortable: true,
+      width: '140px'
+    },
+    {
+      title: 'Aksi',
+      key: 'actions',
+      sortable: false,
+      width: '120px', 
+      align: 'center'
+    }
+  )
+
+  return baseHeaders
+})
 
 // Training program options for filter
 const trainingProgramOptions = computed(() => {
@@ -531,6 +705,16 @@ const editParticipant = (participant) => {
   editDialog.value = true
 }
 
+const updateProgress = (participant) => {
+  selectedParticipant.value = participant
+  progressDialog.value = true
+}
+
+const viewPaymentProof = (participant) => {
+  selectedParticipant.value = participant
+  paymentProofDialog.value = true
+}
+
 const submitParticipant = (participant) => {
   selectedParticipant.value = participant
   submitDialog.value = true
@@ -596,9 +780,32 @@ const handleParticipantSaved = () => {
   fetchParticipants()
 }
 
-const handleParticipantUpdated = () => {
+const handleParticipantUpdated = async () => {
   showSnackbar('Data peserta berhasil diupdate', 'success')
-  fetchParticipants()
+  
+  // Store the current selected participant ID
+  const selectedId = selectedParticipant.value?.id
+  
+  // Refresh the participants list
+  await fetchParticipants()
+  
+  // Update selectedParticipant with fresh data from the updated list
+  if (selectedId) {
+    const updatedParticipant = participants.value.find(p => p.id === selectedId)
+    if (updatedParticipant) {
+      selectedParticipant.value = updatedParticipant
+    } else {
+      // If not found in current page, fetch individual participant
+      try {
+        const response = await participantStore.fetchParticipantById(selectedId)
+        if (response.success) {
+          selectedParticipant.value = response.data.participant
+        }
+      } catch (error) {
+        console.error('Failed to fetch updated participant:', error)
+      }
+    }
+  }
 }
 
 const handlePageChange = (page) => {
@@ -683,9 +890,39 @@ const getProgressColor = (percentage) => {
   return 'error'
 }
 
+const getPaymentColor = (paymentOption) => {
+  const colors = {
+    pay_now: 'success',
+    pay_later: 'orange'
+  }
+  return colors[paymentOption] || 'grey'
+}
+
+const getPaymentText = (paymentOption) => {
+  const texts = {
+    pay_now: 'Bayar Sekarang',
+    pay_later: 'Bayar Nanti'
+  }
+  return texts[paymentOption] || '-'
+}
+
 const formatDate = (date) => {
   if (!date) return '-'
   return format(new Date(date), 'dd MMM yyyy', { locale: idLocale })
+}
+
+const isImageFile = (fileInfo) => {
+  if (!fileInfo || !fileInfo.format) return false
+  const imageFormats = ['jpg', 'jpeg', 'png', 'gif', 'webp']
+  return imageFormats.includes(fileInfo.format.toLowerCase())
+}
+
+const formatFileSize = (bytes) => {
+  if (!bytes) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
 // Lifecycle

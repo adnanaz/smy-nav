@@ -7,7 +7,7 @@ import os from 'os';
 
 import prisma from '../config/database.js';
 import logger from '../utils/logger.js';
-import { protect } from '../middleware/auth.js';
+import { protect, requireRole } from '../middleware/auth.js';
 import { uploadToCloudinary, deleteFromCloudinary } from '../config/cloudinary.js';
 
 const router = express.Router();
@@ -448,7 +448,7 @@ router.post('/', protect, upload.fields([
         currentProgressStep: 1,
         progressPercentage: 16.67,
         agencyId: req.user.agencyId,
-        createdById: req.user.id,
+        createdBy: req.user.id,
         documents
       },
       include: {
@@ -491,7 +491,8 @@ router.put('/:id', protect, upload.fields([
   { name: 'foto', maxCount: 1 },
   { name: 'surat_sehat', maxCount: 1 },
   { name: 'passport', maxCount: 1 },
-  { name: 'sertifikat_bst', maxCount: 1 }
+  { name: 'sertifikat_bst', maxCount: 1 },
+  { name: 'payment_proof', maxCount: 1 }
 ]), [
   body('fullName')
     .optional()
@@ -533,8 +534,12 @@ router.put('/:id', protect, upload.fields([
     .withMessage('Address must be between 10 and 500 characters'),
   body('status')
     .optional()
-    .isIn(['draft', 'submitted', 'verified', 'approved', 'training', 'completed', 'rejected'])
-    .withMessage('Invalid status')
+    .isIn(['draft', 'submitted', 'verified', 'waiting_quota', 'sent_to_center', 'waiting_dispatch', 'completed', 'rejected'])
+    .withMessage('Invalid status'),
+  body('paymentOption')
+    .optional()
+    .isIn(['pay_now', 'pay_later'])
+    .withMessage('Payment option must be either pay_now or pay_later')
 ], async (req, res, next) => {
   try {
     const errors = validationResult(req);
@@ -587,8 +592,11 @@ router.put('/:id', protect, upload.fields([
     if (Object.keys(uploadedFiles).length > 0) {
       const uploadPromises = [];
       
-      // Process each uploaded file for Cloudinary upload
+      // Process each uploaded file for Cloudinary upload (excluding payment_proof)
       Object.keys(uploadedFiles).forEach(fieldname => {
+        // Skip payment_proof as it's handled separately
+        if (fieldname === 'payment_proof') return;
+        
         const file = uploadedFiles[fieldname][0];
         uploadPromises.push(
           uploadToCloudinary(file, `smy-nav/participants/${existingParticipant.registrationNumber}`)
@@ -628,9 +636,47 @@ router.put('/:id', protect, upload.fields([
       }
     }
 
+    // Handle payment proof upload if provided
+    let updatedPaymentProof = existingParticipant.paymentProof;
+    if (uploadedFiles.payment_proof) {
+      const paymentFile = uploadedFiles.payment_proof[0];
+      try {
+        const paymentUploadResult = await uploadToCloudinary(paymentFile, `smy-nav/participants/${existingParticipant.registrationNumber}/payment`);
+        if (paymentUploadResult.success) {
+          updatedPaymentProof = {
+            url: paymentUploadResult.url,
+            public_id: paymentUploadResult.public_id,
+            original_filename: paymentUploadResult.original_filename,
+            format: paymentUploadResult.format,
+            bytes: paymentUploadResult.bytes
+          };
+        }
+        // Clean up temporary file
+        try {
+          fs.unlinkSync(paymentFile.path);
+        } catch (cleanupError) {
+          console.warn('Failed to cleanup payment proof file:', cleanupError.message);
+        }
+      } catch (uploadError) {
+        console.error('Payment proof upload failed:', uploadError);
+        return res.status(500).json({
+          success: false,
+          error: { message: `Payment proof upload failed: ${uploadError.message}` }
+        });
+      }
+    }
+
     // Convert birthDate if provided
     if (updateData.birthDate) {
       updateData.birthDate = new Date(updateData.birthDate);
+    }
+
+    // Convert numeric fields if provided
+    if (updateData.currentProgressStep !== undefined) {
+      updateData.currentProgressStep = parseInt(updateData.currentProgressStep);
+    }
+    if (updateData.progressPercentage !== undefined) {
+      updateData.progressPercentage = parseFloat(updateData.progressPercentage);
     }
 
     // Update participant
@@ -639,6 +685,7 @@ router.put('/:id', protect, upload.fields([
       data: {
         ...updateData,
         documents: updatedDocuments,
+        paymentProof: updatedPaymentProof,
         updatedAt: new Date()
       },
       include: {
@@ -729,7 +776,8 @@ router.post('/agency-submission', protect, upload.fields([
   { name: 'foto', maxCount: 1 },
   { name: 'surat_sehat', maxCount: 1 },
   { name: 'passport', maxCount: 1 },
-  { name: 'sertifikat_bst', maxCount: 1 }
+  { name: 'sertifikat_bst', maxCount: 1 },
+  { name: 'payment_proof', maxCount: 1 }
 ]), [
   body('trainingPrograms')
     .custom((value) => {
@@ -751,7 +799,10 @@ router.post('/agency-submission', protect, upload.fields([
   body('hasBSTCertificate')
     .optional()
     .isBoolean()
-    .withMessage('hasBSTCertificate must be a boolean value')
+    .withMessage('hasBSTCertificate must be a boolean value'),
+  body('paymentOption')
+    .isIn(['pay_now', 'pay_later'])
+    .withMessage('Payment option must be either pay_now or pay_later')
 ], async (req, res, next) => {
   try {
     const errors = validationResult(req);
@@ -836,8 +887,11 @@ router.post('/agency-submission', protect, upload.fields([
     const documents = {};
     const uploadPromises = [];
     
-    // Process each uploaded file for Cloudinary upload
+    // Process each uploaded file for Cloudinary upload (excluding payment_proof)
     Object.keys(uploadedFiles).forEach(fieldname => {
+      // Skip payment_proof as it's handled separately
+      if (fieldname === 'payment_proof') return;
+      
       const file = uploadedFiles[fieldname][0];
       uploadPromises.push(
         uploadToCloudinary(file, `smy-nav/participants/${registrationNumber}`)
@@ -876,8 +930,54 @@ router.post('/agency-submission', protect, upload.fields([
       });
     }
 
-    // Extract fullName from request
+    // Extract data from request
     const fullName = req.body.fullName || 'Peserta Baru';
+    const paymentOption = req.body.paymentOption; // pay_now or pay_later
+    
+    // Debug payment info
+    console.log('=== PAYMENT DEBUG ===');
+    console.log('paymentOption:', paymentOption);
+    console.log('payment_proof in files:', uploadedFiles.payment_proof ? 'YES' : 'NO');
+    console.log('payment_proof details:', uploadedFiles.payment_proof);
+    
+    // Handle payment proof if pay_now is selected
+    let paymentProof = null;
+    if (paymentOption === 'pay_now' && uploadedFiles.payment_proof) {
+      // Upload payment proof to Cloudinary
+      const paymentFile = uploadedFiles.payment_proof[0];
+      try {
+        const paymentUploadResult = await uploadToCloudinary(paymentFile, `smy-nav/participants/${registrationNumber}/payment`);
+        if (paymentUploadResult.success) {
+          paymentProof = {
+            url: paymentUploadResult.url,
+            public_id: paymentUploadResult.public_id,
+            original_filename: paymentUploadResult.original_filename,
+            format: paymentUploadResult.format,
+            bytes: paymentUploadResult.bytes
+          };
+        }
+        // Clean up temporary file
+        try {
+          fs.unlinkSync(paymentFile.path);
+        } catch (cleanupError) {
+          console.warn('Failed to cleanup payment proof file:', cleanupError.message);
+        }
+      } catch (uploadError) {
+        console.error('Payment proof upload failed:', uploadError);
+        return res.status(500).json({
+          success: false,
+          error: { message: `Payment proof upload failed: ${uploadError.message}` }
+        });
+      }
+    }
+    
+    // Validate payment proof requirement
+    if (paymentOption === 'pay_now' && !paymentProof) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'Payment proof is required when selecting pay now option' }
+      });
+    }
     
     // Create participant submissions for each training program
     const participants = [];
@@ -900,6 +1000,9 @@ router.post('/agency-submission', protect, upload.fields([
         phone: null,
         // Documents stored as JSON in the participant record
         documents: documents,
+        // Payment information
+        paymentOption: paymentOption,
+        paymentProof: paymentProof,
         // Use correct field names from schema
         agencyId: req.user.agencyId,
         createdBy: req.user.id  // Changed from createdById to createdBy to match schema
@@ -1006,5 +1109,329 @@ router.put('/:id/submit', protect, async (req, res, next) => {
     next(error);
   }
 });
+
+// @desc    Verify participant (Admin only)
+// @route   POST /api/participants/:id/verify
+// @access  Private (Admin)
+router.post('/:id/verify', protect, requireRole(['admin', 'super_admin']), async (req, res, next) => {
+  try {
+    const participantId = req.params.id
+
+    // Find participant
+    const participant = await prisma.participant.findUnique({
+      where: { id: participantId }
+    })
+
+    if (!participant) {
+      return res.status(404).json({
+        success: false,
+        error: { message: 'Participant not found' }
+      })
+    }
+
+    if (participant.status !== 'submitted') {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'Only submitted participants can be verified' }
+      })
+    }
+
+    // Update participant status
+    const updatedParticipant = await prisma.participant.update({
+      where: { id: participantId },
+      data: {
+        status: 'verified',
+        currentProgressStep: 2,
+        progressPercentage: 33.33 // 2/6 steps = ~33.33%
+      },
+      include: {
+        agency: {
+          select: {
+            id: true,
+            name: true,
+            code: true
+          }
+        },
+        creator: {
+          select: {
+            id: true,
+            fullName: true,
+            username: true
+          }
+        }
+      }
+    })
+
+    res.json({
+      success: true,
+      data: updatedParticipant,
+      message: 'Participant successfully verified'
+    })
+
+  } catch (error) {
+    logger.error('Verify participant error:', error)
+    next(error)
+  }
+})
+
+// @desc    Reject participant (Admin only)
+// @route   POST /api/participants/:id/reject
+// @access  Private (Admin)
+router.post('/:id/reject', protect, requireRole(['admin', 'super_admin']), async (req, res, next) => {
+  try {
+    const participantId = req.params.id
+    const { reason } = req.body
+
+    // Find participant
+    const participant = await prisma.participant.findUnique({
+      where: { id: participantId }
+    })
+
+    if (!participant) {
+      return res.status(404).json({
+        success: false,
+        error: { message: 'Participant not found' }
+      })
+    }
+
+    if (participant.status !== 'submitted') {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'Only submitted participants can be rejected' }
+      })
+    }
+
+    // Update participant status back to draft
+    const updatedParticipant = await prisma.participant.update({
+      where: { id: participantId },
+      data: {
+        status: 'draft',
+        currentProgressStep: 0,
+        progressPercentage: 0,
+        notes: reason ? `Ditolak: ${reason}` : 'Ditolak oleh admin'
+      },
+      include: {
+        agency: {
+          select: {
+            id: true,
+            name: true,
+            code: true
+          }
+        },
+        creator: {
+          select: {
+            id: true,
+            fullName: true,
+            username: true
+          }
+        }
+      }
+    })
+
+    res.json({
+      success: true,
+      data: updatedParticipant,
+      message: 'Participant rejected and returned to draft'
+    })
+
+  } catch (error) {
+    logger.error('Reject participant error:', error)
+    next(error)
+  }
+})
+
+// @desc    Assign participant to batch (Admin only)
+// @route   POST /api/participants/:id/assign-batch
+// @access  Private (Admin)
+router.post('/:id/assign-batch', protect, requireRole(['admin', 'super_admin']), async (req, res, next) => {
+  try {
+    const participantId = req.params.id
+
+    // Find participant
+    const participant = await prisma.participant.findUnique({
+      where: { id: participantId }
+    })
+
+    if (!participant) {
+      return res.status(404).json({
+        success: false,
+        error: { message: 'Participant not found' }
+      })
+    }
+
+    if (participant.status !== 'verified') {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'Only verified participants can be assigned to batch' }
+      })
+    }
+
+    // For now, just update status to waiting_quota
+    // Later we'll implement actual batch assignment logic
+    const updatedParticipant = await prisma.participant.update({
+      where: { id: participantId },
+      data: {
+        status: 'waiting_quota',
+        currentProgressStep: 3,
+        progressPercentage: 50 // 3/6 steps = 50%
+      },
+      include: {
+        agency: {
+          select: {
+            id: true,
+            name: true,
+            code: true
+          }
+        },
+        creator: {
+          select: {
+            id: true,
+            fullName: true,
+            username: true
+          }
+        }
+      }
+    })
+
+    res.json({
+      success: true,
+      data: updatedParticipant,
+      message: 'Participant assigned to batch and waiting for quota'
+    })
+
+  } catch (error) {
+    logger.error('Assign batch error:', error)
+    next(error)
+  }
+})
+
+// @desc    Confirm dispatch (Admin only)
+// @route   POST /api/participants/:id/confirm-dispatch
+// @access  Private (Admin)
+router.post('/:id/confirm-dispatch', protect, requireRole(['admin', 'super_admin']), async (req, res, next) => {
+  try {
+    const participantId = req.params.id
+
+    // Find participant
+    const participant = await prisma.participant.findUnique({
+      where: { id: participantId }
+    })
+
+    if (!participant) {
+      return res.status(404).json({
+        success: false,
+        error: { message: 'Participant not found' }
+      })
+    }
+
+    if (participant.status !== 'sent_to_center') {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'Only participants sent to center can have dispatch confirmed' }
+      })
+    }
+
+    // Update participant status
+    const updatedParticipant = await prisma.participant.update({
+      where: { id: participantId },
+      data: {
+        status: 'waiting_dispatch',
+        currentProgressStep: 5,
+        progressPercentage: 83.33 // 5/6 steps = ~83.33%
+      },
+      include: {
+        agency: {
+          select: {
+            id: true,
+            name: true,
+            code: true
+          }
+        },
+        creator: {
+          select: {
+            id: true,
+            fullName: true,
+            username: true
+          }
+        }
+      }
+    })
+
+    res.json({
+      success: true,
+      data: updatedParticipant,
+      message: 'Dispatch confirmed successfully'
+    })
+
+  } catch (error) {
+    logger.error('Confirm dispatch error:', error)
+    next(error)
+  }
+})
+
+// @desc    Complete participant (Admin only)
+// @route   POST /api/participants/:id/complete
+// @access  Private (Admin)
+router.post('/:id/complete', protect, requireRole(['admin', 'super_admin']), async (req, res, next) => {
+  try {
+    const participantId = req.params.id
+
+    // Find participant
+    const participant = await prisma.participant.findUnique({
+      where: { id: participantId }
+    })
+
+    if (!participant) {
+      return res.status(404).json({
+        success: false,
+        error: { message: 'Participant not found' }
+      })
+    }
+
+    if (participant.status !== 'waiting_dispatch') {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'Only participants waiting for dispatch can be completed' }
+      })
+    }
+
+    // Update participant status
+    const updatedParticipant = await prisma.participant.update({
+      where: { id: participantId },
+      data: {
+        status: 'completed',
+        currentProgressStep: 6,
+        progressPercentage: 100,
+        completedAt: new Date()
+      },
+      include: {
+        agency: {
+          select: {
+            id: true,
+            name: true,
+            code: true
+          }
+        },
+        creator: {
+          select: {
+            id: true,
+            fullName: true,
+            username: true
+          }
+        }
+      }
+    })
+
+    res.json({
+      success: true,
+      data: updatedParticipant,
+      message: 'Participant process completed successfully'
+    })
+
+  } catch (error) {
+    logger.error('Complete participant error:', error)
+    next(error)
+  }
+})
 
 export default router;
