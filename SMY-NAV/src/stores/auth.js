@@ -22,10 +22,21 @@ export const useAuthStore = defineStore('auth', {
     hasPermission: (state) => (requiredRole) => {
       if (!state.user) return false
       
+      // If requiredRole is an array, check if user role is in the array
+      if (Array.isArray(requiredRole)) {
+        return requiredRole.includes(state.user.role)
+      }
+      
+      // For single role check, also support exact match for participant
+      if (requiredRole === state.user.role) {
+        return true
+      }
+      
       const roleHierarchy = {
         'super_admin': 3,
         'admin': 2,
-        'agent': 1
+        'agent': 1,
+        'participant': 0
       }
       
       const userLevel = roleHierarchy[state.user.role] || 0

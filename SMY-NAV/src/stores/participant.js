@@ -43,6 +43,7 @@ export const useParticipantStore = defineStore('participant', () => {
       if (params.sortBy) queryParams.append('sortBy', params.sortBy)
       if (params.sortOrder) queryParams.append('sortOrder', params.sortOrder)
       if (params.agencyOnly) queryParams.append('agencyOnly', params.agencyOnly)
+      if (params.participantOnly) queryParams.append('participantOnly', params.participantOnly)
 
       const response = await axios.get(
         `${API_BASE_URL}/participants?${queryParams.toString()}`,
@@ -118,18 +119,38 @@ export const useParticipantStore = defineStore('participant', () => {
         }
       })
 
-      // Add files
+      // Add files (similar to agency submission)
       if (participantData.files) {
+        console.log('=== PARTICIPANT SELF-REGISTER DEBUG - Files to upload ===');
         Object.keys(participantData.files).forEach(fieldName => {
-          const file = participantData.files[fieldName]
-          if (file) {
-            formData.append(fieldName, file)
+          const fileInput = participantData.files[fieldName]
+          console.log(`Field: ${fieldName}`, fileInput);
+          
+          if (fileInput) {
+            // Handle both FileList and Array cases
+            let file = null;
+            if (fileInput.length > 0) {
+              file = fileInput[0]; // FileList or Array
+            } else if (fileInput instanceof File) {
+              file = fileInput; // Direct File object
+            }
+            
+            if (file) {
+              console.log(`Appending file for ${fieldName}:`, file.name, file.size);
+              formData.append(fieldName, file);
+            }
           }
         })
       }
 
+      // Use different endpoint based on user role
+      let endpoint = `${API_BASE_URL}/participants`
+      if (authStore.user?.role === 'participant') {
+        endpoint = `${API_BASE_URL}/participants/self-register`
+      }
+
       const response = await axios.post(
-        `${API_BASE_URL}/participants`,
+        endpoint,
         formData,
         {
           headers: {
@@ -140,9 +161,24 @@ export const useParticipantStore = defineStore('participant', () => {
       )
 
       if (response.data.success) {
-        const newParticipant = response.data.data.participant
-        participants.value.unshift(newParticipant)
-        return newParticipant
+        const result = response.data.data
+        // Handle both single participant and multiple participants response
+        if (result.participants) {
+          // Multiple participants (self-registration)
+          result.participants.forEach(participant => {
+            participants.value.unshift(participant)
+          })
+          return {
+            participants: result.participants,
+            registrationNumber: result.registrationNumber,
+            totalPrograms: result.totalPrograms
+          }
+        } else {
+          // Single participant (agent creation)
+          const newParticipant = result.participant
+          participants.value.unshift(newParticipant)
+          return newParticipant
+        }
       } else {
         throw new Error(response.data.error?.message || 'Failed to create participant')
       }
@@ -245,29 +281,38 @@ export const useParticipantStore = defineStore('participant', () => {
       const authStore = useAuthStore()
       const token = authStore.token
 
-      // Create FormData for file uploads
-      const formData = new FormData()
-      
-      // Add text fields
-      Object.keys(participantData).forEach(key => {
-        if (key !== 'files' && participantData[key] !== null && participantData[key] !== undefined) {
-          formData.append(key, participantData[key])
-        }
-      })
+      let requestData
 
-      // Add files
-      if (participantData.files) {
-        Object.keys(participantData.files).forEach(fieldName => {
-          const file = participantData.files[fieldName]
-          if (file) {
-            formData.append(fieldName, file)
+      // Check if participantData is already FormData
+      if (participantData instanceof FormData) {
+        requestData = participantData
+      } else {
+        // Create FormData for file uploads
+        const formData = new FormData()
+        
+        // Add text fields
+        Object.keys(participantData).forEach(key => {
+          if (key !== 'files' && participantData[key] !== null && participantData[key] !== undefined) {
+            formData.append(key, participantData[key])
           }
         })
+
+        // Add files
+        if (participantData.files) {
+          Object.keys(participantData.files).forEach(fieldName => {
+            const file = participantData.files[fieldName]
+            if (file) {
+              formData.append(fieldName, file)
+            }
+          })
+        }
+        
+        requestData = formData
       }
 
       const response = await axios.put(
         `${API_BASE_URL}/participants/${id}`,
-        formData,
+        requestData,
         {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -634,6 +679,153 @@ export const useParticipantStore = defineStore('participant', () => {
     return updateParticipant(id, { notes })
   }
 
+  // Payment management methods
+  const approvePayment = async (participantId, adminNotes = '') => {
+    try {
+      loading.value = true
+      error.value = null
+
+      const authStore = useAuthStore()
+      const token = authStore.token
+
+      const response = await axios.put(
+        `${API_BASE_URL}/participants/${participantId}/payment/approve`,
+        { adminNotes },
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      )
+
+      // Update local participant if it exists
+      const participantIndex = participants.value.findIndex(p => p.id === participantId)
+      if (participantIndex !== -1) {
+        participants.value[participantIndex] = response.data.participant
+      }
+
+      // Update currentParticipant if it's the same
+      if (currentParticipant.value?.id === participantId) {
+        currentParticipant.value = response.data.participant
+      }
+
+      return response.data
+    } catch (err) {
+      console.error('Error approving payment:', err)
+      error.value = err.response?.data?.message || 'Failed to approve payment'
+      throw error.value
+    } finally {
+      loading.value = false
+    }
+  }
+
+  const rejectPayment = async (participantId, adminNotes) => {
+    try {
+      loading.value = true
+      error.value = null
+
+      const authStore = useAuthStore()
+      const token = authStore.token
+
+      const response = await axios.put(
+        `${API_BASE_URL}/participants/${participantId}/payment/reject`,
+        { adminNotes },
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      )
+
+      // Update local participant if it exists
+      const participantIndex = participants.value.findIndex(p => p.id === participantId)
+      if (participantIndex !== -1) {
+        participants.value[participantIndex] = response.data.participant
+      }
+
+      // Update currentParticipant if it's the same
+      if (currentParticipant.value?.id === participantId) {
+        currentParticipant.value = response.data.participant
+      }
+
+      return response.data
+    } catch (err) {
+      console.error('Error rejecting payment:', err)
+      error.value = err.response?.data?.message || 'Failed to reject payment'
+      throw error.value
+    } finally {
+      loading.value = false
+    }
+  }
+
+  const fetchInvoices = async (params = {}) => {
+    loading.value = true
+    error.value = null
+    
+    try {
+      const authStore = useAuthStore()
+      const token = authStore.token
+
+      const queryParams = new URLSearchParams()
+      
+      if (params.page) queryParams.append('page', params.page)
+      if (params.limit) queryParams.append('limit', params.limit)
+      if (params.search) queryParams.append('search', params.search)
+      if (params.paymentOption) queryParams.append('paymentOption', params.paymentOption)
+      if (params.paymentStatus) queryParams.append('paymentStatus', params.paymentStatus)
+      if (params.trainingProgram) queryParams.append('trainingProgram', params.trainingProgram)
+      if (params.agencyName) queryParams.append('agencyName', params.agencyName)
+      if (params.startDate) queryParams.append('startDate', params.startDate)
+      if (params.endDate) queryParams.append('endDate', params.endDate)
+      if (params.sortBy) queryParams.append('sortBy', params.sortBy)
+      if (params.sortOrder) queryParams.append('sortOrder', params.sortOrder)
+
+      const response = await axios.get(
+        `${API_BASE_URL}/invoices?${queryParams.toString()}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      )
+
+      return response.data
+    } catch (err) {
+      console.error('Error fetching invoices:', err)
+      error.value = err.response?.data?.message || 'Failed to fetch invoices'
+      throw error.value
+    } finally {
+      loading.value = false
+    }
+  }
+
+  const getPaymentHistory = async (participantId) => {
+    try {
+      loading.value = true
+      error.value = null
+
+      const authStore = useAuthStore()
+      const token = authStore.token
+
+      const response = await axios.get(
+        `${API_BASE_URL}/participants/${participantId}/payment/history`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      )
+
+      return response.data
+    } catch (err) {
+      console.error('Error fetching payment history:', err)
+      error.value = err.response?.data?.message || 'Failed to fetch payment history'
+      throw error.value
+    } finally {
+      loading.value = false
+    }
+  }
+
   // Clear store data
   const clearParticipants = () => {
     participants.value = []
@@ -678,6 +870,12 @@ export const useParticipantStore = defineStore('participant', () => {
     confirmDispatch,
     completeParticipant,
     updateParticipantNotes,
+    
+    // Payment management
+    approvePayment,
+    rejectPayment,
+    fetchInvoices,
+    getPaymentHistory,
     
     // Utilities
     clearParticipants,

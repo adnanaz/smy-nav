@@ -18,6 +18,10 @@ import agencyRoutes from './routes/agencies.js';
 import participantRoutes from './routes/participants.js';
 import documentRoutes from './routes/documents.js';
 import progressRoutes from './routes/progress.js';
+import invoiceRoutes from './routes/invoices.js';
+import scheduleRoutes from './routes/schedules.js';
+import dashboardRoutes from './routes/dashboard.js';
+import profileRoutes from './routes/profile.js';
 
 // Import middleware
 import { errorHandler } from './middleware/errorHandler.js';
@@ -125,6 +129,10 @@ app.use('/api/agencies', agencyRoutes);
 app.use('/api/participants', participantRoutes);
 app.use('/api/documents', documentRoutes);
 app.use('/api/progress', progressRoutes);
+app.use('/api/invoices', invoiceRoutes);
+app.use('/api/schedules', scheduleRoutes);
+app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/profile', profileRoutes);
 
 // Error handling middleware (must be last)
 app.use(notFound);

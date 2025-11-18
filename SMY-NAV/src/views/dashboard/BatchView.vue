@@ -308,8 +308,7 @@ const snackbar = ref({
 const trainingProgramOptions = [
   { title: 'Basic Safety Training', value: 'BST' },
   { title: 'Security Awareness Training', value: 'SAT' },
-  { title: 'Crowd & Crisis Management (CMHBT)', value: 'CCM_CMHBT' },
-  { title: 'Crowd & Crisis Management (CMT)', value: 'CCM_CMT' },
+  { title: 'Crowd & Crisis Management', value: 'CCM' },
   { title: 'Ship Security Duties', value: 'SDSD' },
   { title: 'Personnel Survival Craft & Rescue Boat', value: 'PSCRB' },
   { title: 'Survival Boat', value: 'SB' },

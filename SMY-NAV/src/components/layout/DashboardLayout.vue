@@ -27,16 +27,142 @@
 
       <v-divider></v-divider>
 
-      <v-list density="compact" nav>
+      <v-list 
+        density="compact" 
+        nav
+        v-model:opened="openGroups"
+      >
+        <!-- Dashboard -->
         <v-list-item
-          v-for="item in navigationItems"
-          :key="item.title"
-          :prepend-icon="item.icon"
-          :title="item.title"
-          :value="item.value"
-          :to="item.to"
-          :disabled="item.disabled"
-        ></v-list-item>
+          prepend-icon="mdi-view-dashboard"
+          title="Dashboard"
+          value="dashboard"
+          to="/dashboard"
+          exact
+        >
+          <template #prepend>
+            <v-icon>mdi-view-dashboard</v-icon>
+          </template>
+        </v-list-item>
+
+        <!-- Participants (All roles) -->
+        <v-list-item
+          prepend-icon="mdi-account-group"
+          :title="authStore.isParticipant ? 'Data Peserta' : 'Participants'"
+          value="participants"
+          to="/participants"
+          exact
+        >
+          <template #prepend>
+            <v-icon>mdi-account-group</v-icon>
+          </template>
+        </v-list-item>
+
+        <!-- Daftar Diklat (Participant only) -->
+        <v-list-item
+          v-if="authStore.isParticipant"
+          prepend-icon="mdi-plus-circle"
+          title="Daftar Diklat"
+          value="daftar-diklat"
+          to="/daftar-diklat"
+          exact
+        >
+          <template #prepend>
+            <v-icon>mdi-plus-circle</v-icon>
+          </template>
+        </v-list-item>
+
+        <!-- Admin Menu -->
+        <v-list-group v-if="authStore.isAdmin" value="admin">
+          <template v-slot:activator="{ props }">
+            <v-list-item
+              v-bind="props"
+              prepend-icon="mdi-shield-account"
+              title="Admin"
+            >
+              <template #prepend>
+                <v-icon>mdi-shield-account</v-icon>
+              </template>
+            </v-list-item>
+          </template>
+
+          <v-list-item
+            prepend-icon="mdi-receipt"
+            title="Invoice Management"
+            value="invoices"
+            to="/admin/invoices"
+            exact
+          >
+            <template #prepend>
+              <v-icon>mdi-receipt</v-icon>
+            </template>
+          </v-list-item>
+
+          <v-list-item
+            prepend-icon="mdi-calendar-clock"
+            title="Jadwal Pelatihan"
+            value="schedules"
+            to="/admin/schedules"
+            exact
+          >
+            <template #prepend>
+              <v-icon>mdi-calendar-clock</v-icon>
+            </template>
+          </v-list-item>
+
+          <v-list-item
+            prepend-icon="mdi-account-multiple"
+            title="Users"
+            value="users"
+            to="/users"
+            disabled
+          >
+            <template #prepend>
+              <v-icon>mdi-account-multiple</v-icon>
+            </template>
+          </v-list-item>
+        </v-list-group>
+
+
+
+        <!-- Super Admin Menu -->
+        <v-list-group v-if="authStore.isSuperAdmin" value="superadmin">
+          <template v-slot:activator="{ props }">
+            <v-list-item
+              v-bind="props"
+              prepend-icon="mdi-shield-crown"
+              title="Super Admin"
+            >
+              <template #prepend>
+                <v-icon>mdi-shield-crown</v-icon>
+              </template>
+            </v-list-item>
+          </template>
+
+          <v-list-item
+            prepend-icon="mdi-office-building"
+            title="Agencies"
+            value="agencies"
+            to="/agencies"
+            disabled
+          >
+            <template #prepend>
+              <v-icon>mdi-office-building</v-icon>
+            </template>
+          </v-list-item>
+
+          <v-list-item
+            prepend-icon="mdi-cog"
+            title="System"
+            value="system"
+            to="/system"
+            disabled
+          >
+            <template #prepend>
+              <v-icon>mdi-cog</v-icon>
+            </template>
+          </v-list-item>
+        </v-list-group>
       </v-list>
 
       <template #append>
@@ -110,10 +236,10 @@
             title="Profile"
             @click="$router.push('/profile')"
           ></v-list-item>
-          <v-list-item
+          <!-- <v-list-item
             prepend-icon="mdi-cog"
             title="Settings"
-          ></v-list-item>
+          ></v-list-item> -->
           <v-divider></v-divider>
           <v-list-item
             prepend-icon="mdi-logout"
@@ -156,7 +282,7 @@
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useTheme } from 'vuetify'
-import { useAuthStore } from '@/stores/auth'
+import { useAuthStore } from '@/stores/auth-simple'
 
 const props = defineProps({
   pageTitle: {
@@ -174,6 +300,7 @@ const drawer = ref(true)
 const rail = ref(false)
 const showNotifications = ref(false)
 const unreadNotifications = ref(3)
+const openGroups = ref(['admin']) // Make admin group open by default
 
 // Sample notifications
 const notifications = ref([
@@ -201,34 +328,11 @@ const notifications = ref([
 const isDark = computed(() => theme.global.name.value === 'dark')
 
 const userInitials = computed(() => {
-  const name = authStore.userName
+  const name = authStore.userName || 'User'
   return name.split(' ').map(n => n[0]).join('').toUpperCase()
 })
 
-// Navigation items based on user role
-const navigationItems = computed(() => {
-  const baseItems = [
-    { title: 'Dashboard', icon: 'mdi-view-dashboard', value: 'dashboard', to: '/dashboard' },
-    { title: 'Participants', icon: 'mdi-account-group', value: 'participants', to: '/participants' },
-    { title: 'Documents', icon: 'mdi-file-document', value: 'documents', to: '/documents', disabled: true },
-    { title: 'Progress', icon: 'mdi-progress-check', value: 'progress', to: '/progress', disabled: true },
-  ]
 
-  if (authStore.isAdmin) {
-    baseItems.push(
-      { title: 'Users', icon: 'mdi-account-multiple', value: 'users', to: '/users', disabled: true }
-    )
-  }
-
-  if (authStore.isSuperAdmin) {
-    baseItems.push(
-      { title: 'Agencies', icon: 'mdi-office-building', value: 'agencies', to: '/agencies', disabled: true },
-      { title: 'System', icon: 'mdi-cog', value: 'system', to: '/system', disabled: true }
-    )
-  }
-
-  return baseItems
-})
 
 // Methods
 const toggleTheme = () => {
@@ -252,5 +356,27 @@ const handleLogout = async () => {
 
 .v-app-bar {
   border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+/* Ensure icons are always visible */
+.v-list-item .v-icon {
+  opacity: 1 !important;
+}
+
+.v-list-item--active .v-icon {
+  opacity: 1 !important;
+}
+
+.v-list-item__prepend .v-icon {
+  opacity: 1 !important;
+}
+
+/* Ensure text is visible */
+.v-list-item__content {
+  opacity: 1 !important;
+}
+
+.v-list-item--active .v-list-item__content {
+  opacity: 1 !important;
 }
 </style>

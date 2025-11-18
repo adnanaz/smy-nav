@@ -40,6 +40,8 @@ const config = {
   security: {
     bcryptRounds: parseInt(process.env.BCRYPT_ROUNDS) || 12,
     corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+    jwtSecret: process.env.JWT_SECRET || 'your_super_secret_jwt_key',
+    jwtExpire: process.env.JWT_EXPIRES_IN || '7d',
   },
   
   // Application Configuration

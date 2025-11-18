@@ -289,7 +289,8 @@
                       <v-col cols="12" md="8">
                         <div class="d-flex justify-space-between align-center">
                           <div>
-                            <span class="text-h6">{{ trainingProgramOptions.find(opt => opt.value === formData.trainingProgram)?.title || formData.trainingProgram }}</span>
+                            <span class="text-h6">{{ getTrainingProgramName(formData.trainingProgram) }}</span>
+                            <div class="text-caption text-grey-darken-1">{{ formData.trainingProgram }}</div>
                           </div>
                           <div class="text-right">
                             <span class="text-h5 font-weight-bold text-primary">
@@ -432,7 +433,7 @@
 </template>
 
 <script setup>
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, onMounted } from 'vue'
 import { useParticipantStore } from '@/stores/participant'
 import { useAuthStore } from '@/stores/auth'
 
@@ -496,14 +497,15 @@ const trainingProgramOptions = computed(() => {
   }))
 })
 
-// Training prices
+// Training prices (sama dengan DaftarDiklatView dan ParticipantView)
 const trainingPrices = {
-  'bst': 1850000,      // BST: 1jt 850rb
-  'sat': 950000,       // SAT: 950rb
-  'ccm_cmt': 650000,   // CCM-CMT: 650rb
-  'ccm_cmhbt': 650000, // CCM-CMHBT: 650rb
-  'sdsd': 950000,      // SDSD: 950rb
-  'pscrb': 1200000     // PSCRB: 1jt 200rb
+  BST: 1875000,          // 1jt 875rb
+  SAT: 975000,           // 975rb
+  CCM: 1325000,          // 1jt 325rb (merged CCM_CMT and CCM_CMHBT)
+  SDSD: 975000,          // 975rb
+  PSCRB: 1225000,        // 1jt 225rb
+  SB: 1075000,           // 1jt 75rb
+  UPDATING_BST: 275000   // 275rb
 }
 
 // Computed total cost
@@ -511,6 +513,12 @@ const totalCost = computed(() => {
   if (!formData.value.trainingProgram) return 0
   return trainingPrices[formData.value.trainingProgram] || 0
 })
+
+// Get training program name
+const getTrainingProgramName = (program) => {
+  if (!participantStore.trainingTypes || !program) return program
+  return participantStore.trainingTypes[program]?.name || program
+}
 
 // Format currency function
 const formatCurrency = (amount) => {
@@ -660,4 +668,13 @@ const submitForm = async () => {
     loading.value = false
   }
 }
+
+// Load training types on mount
+onMounted(async () => {
+  try {
+    await participantStore.fetchTrainingTypes()
+  } catch (error) {
+    console.error('Failed to fetch training types:', error)
+  }
+})
 </script>

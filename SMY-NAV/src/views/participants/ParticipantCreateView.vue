@@ -782,14 +782,13 @@ const stepperItems = [
 
 // Training program prices
 const trainingPrices = {
-  BST: 1850000,          // 1jt 850rb
-  SAT: 950000,           // 950rb
-  CCM_CMT: 650000,       // 650rb
-  CCM_CMHBT: 650000,     // 650rb
-  SDSD: 950000,          // 950rb
-  PSCRB: 1200000,        // 1jt 200rb
-  SB: 500000,            // Seaman Book (estimasi)
-  UPDATING_BST: 750000   // Updating BST (estimasi)
+  BST: 1875000,          // 1jt 875rb
+  SAT: 975000,           // 975rb
+  CCM: 1325000,          // 1jt 325rb
+  SDSD: 975000,          // 975rb
+  PSCRB: 1225000,        // 1jt 225rb
+  SB: 1075000,           // 1jt 75rb
+  UPDATING_BST: 275000   // 275rb
 }
 
 // Computed

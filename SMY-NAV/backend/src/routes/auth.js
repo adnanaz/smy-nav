@@ -338,6 +338,165 @@ router.put('/password', protect, [
   }
 });
 
+// @desc    Register participant (public endpoint for walk-in users)
+// @route   POST /api/auth/register-participant
+// @access  Public
+router.post('/register-participant', [
+  body('fullName')
+    .isLength({ min: 3, max: 100 })
+    .withMessage('Nama lengkap minimal 3 karakter'),
+  body('email')
+    .isEmail()
+    .withMessage('Format email tidak valid')
+    .normalizeEmail(),
+  body('phone')
+    .matches(/^(\+62|62|0)[0-9]{9,13}$/)
+    .withMessage('Format nomor HP tidak valid'),
+  body('birthDate')
+    .isISO8601()
+    .withMessage('Format tanggal lahir tidak valid'),
+  body('occupation')
+    .isLength({ min: 2 })
+    .withMessage('Pekerjaan minimal 2 karakter'),
+  body('company')
+    .isLength({ min: 2 })
+    .withMessage('Nama perusahaan minimal 2 karakter'),
+  body('interestedProgram')
+    .notEmpty()
+    .withMessage('Program pelatihan wajib dipilih'),
+  body('source')
+    .notEmpty()
+    .withMessage('Sumber informasi wajib dipilih'),
+  body('password')
+    .isLength({ min: 6 })
+    .withMessage('Password minimal 6 karakter')
+    .matches(/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
+    .withMessage('Password harus mengandung huruf besar, huruf kecil, dan angka')
+], async (req, res, next) => {
+  try {
+    // Check validation errors
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        error: { 
+          message: 'Data tidak valid',
+          details: errors.array()
+        }
+      });
+    }
+
+    const {
+      fullName,
+      email,
+      phone,
+      birthDate,
+      occupation,
+      company,
+      interestedProgram,
+      source,
+      password
+    } = req.body;
+
+    // Validate age (minimum 17 years old)
+    const birthDateObj = new Date(birthDate);
+    const today = new Date();
+    const age = today.getFullYear() - birthDateObj.getFullYear();
+    if (age < 17) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'Minimal berusia 17 tahun' }
+      });
+    }
+
+    // Check if email already exists
+    const existingUser = await prisma.user.findUnique({
+      where: { email }
+    });
+
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'Email sudah terdaftar' }
+      });
+    }
+
+    // Generate username from email (before @)
+    const baseUsername = email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
+    let username = baseUsername;
+    let counter = 1;
+
+    // Ensure username is unique
+    while (await prisma.user.findUnique({ where: { username } })) {
+      username = `${baseUsername}${counter}`;
+      counter++;
+    }
+
+    // Hash password
+    const salt = await bcrypt.genSalt(config.security.bcryptRounds);
+    const passwordHash = await bcrypt.hash(password, salt);
+
+    // Create user with participant role
+    const newUser = await prisma.user.create({
+      data: {
+        username,
+        fullName,
+        email,
+        passwordHash,
+        role: 'participant',
+        isActive: true,
+        emailVerified: true, // Auto-verify for walk-in users
+        // Additional participant data
+        phone,
+        birthDate: new Date(birthDate),
+        occupation,
+        company,
+        interestedProgram,
+        source,
+        registrationDate: new Date(),
+        registrationType: 'walk-in'
+      }
+    });
+
+    // Generate JWT token for auto-login
+    const token = jwt.sign(
+      { 
+        id: newUser.id,
+        email: newUser.email,
+        role: newUser.role
+      },
+      config.jwt.secret,
+      { expiresIn: config.jwt.expiresIn }
+    );
+
+    logger.info(`New participant registered: ${newUser.email}`);
+
+    // Remove password from response
+    const { passwordHash: _, ...userResponse } = newUser;
+
+    res.status(201).json({
+      success: true,
+      data: {
+        user: userResponse,
+        token
+      }
+    });
+
+  } catch (error) {
+    logger.error('Participant registration error:', error);
+    
+    // Handle specific Prisma errors
+    if (error.code === 'P2002') {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'Email atau username sudah terdaftar' }
+      });
+    }
+
+    next(error);
+  }
+});
+
 // @desc    Logout user (client-side token removal)
 // @route   POST /api/auth/logout
 // @access  Private

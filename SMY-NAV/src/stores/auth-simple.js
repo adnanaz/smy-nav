@@ -19,19 +19,15 @@ export const useAuthStore = defineStore('auth', {
     isAdmin: (state) => ['super_admin', 'admin'].includes(state.user?.role),
     isSuperAdmin: (state) => state.user?.role === 'super_admin',
     isAgent: (state) => state.user?.role === 'agent',
-    hasPermission: (state) => (requiredRole) => {
+    isParticipant: (state) => state.user?.role === 'participant',
+    hasPermission: (state) => (requiredRoles) => {
       if (!state.user) return false
       
-      const roleHierarchy = {
-        'super_admin': 3,
-        'admin': 2,
-        'agent': 1
-      }
+      // Handle both single role and array of roles
+      const roles = Array.isArray(requiredRoles) ? requiredRoles : [requiredRoles]
       
-      const userLevel = roleHierarchy[state.user.role] || 0
-      const requiredLevel = roleHierarchy[requiredRole] || 0
-      
-      return userLevel >= requiredLevel
+      // Check if user's role is in the required roles list
+      return roles.includes(state.user.role)
     }
   },
 

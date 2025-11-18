@@ -32,7 +32,7 @@
                 {{ getStatusText(participant.status) }}
               </v-chip>
             </v-col>
-            <v-col cols="12" md="6">
+            <!-- <v-col cols="12" md="6">
               <div class="text-caption text-grey-darken-1 mb-1">Progress</div>
               <div class="d-flex align-center">
                 <v-progress-linear
@@ -44,7 +44,7 @@
                 />
                 <span class="text-h6 font-weight-bold">{{ Math.round(participant.progressPercentage) }}%</span>
               </div>
-            </v-col>
+            </v-col> -->
           </v-row>
         </div>
 

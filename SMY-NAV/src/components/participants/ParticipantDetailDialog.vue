@@ -135,7 +135,7 @@
                       </v-chip>
                     </div>
                   </v-col>
-                  <v-col cols="12" md="6">
+                  <!-- <v-col cols="12" md="6">
                     <div class="mb-4">
                       <div class="text-caption text-grey-darken-1 mb-1">Progress Saat Ini</div>
                       <div class="d-flex align-center mb-2">
@@ -160,7 +160,7 @@
                       <div class="text-caption text-grey-darken-1 mb-1">Dibuat oleh</div>
                       <div class="text-body-1">{{ participant.createdBy?.fullName || '-' }}</div>
                     </div>
-                  </v-col>
+                  </v-col> -->
                 </v-row>
               </v-card-text>
             </v-card>
@@ -184,14 +184,14 @@
                   >
                     <v-card variant="outlined" class="h-100">
                       <!-- Document Preview -->
-                      <div class="document-preview" v-if="docData.url">
+                      <div class="document-preview" v-if="getDocumentUrl(docData)">
                         <v-img
                           v-if="isImageDocument(docData)"
-                          :src="docData.url"
+                          :src="getDocumentUrl(docData)"
                           height="200"
                           cover
                           class="cursor-pointer"
-                          @click="openDocumentPreview(docData.url)"
+                          @click="openDocumentPreview(getDocumentUrl(docData))"
                         >
                           <template #placeholder>
                             <v-row class="fill-height ma-0" align="center" justify="center">
@@ -202,7 +202,7 @@
                         <div v-else class="d-flex align-center justify-center pa-8 bg-grey-lighten-4" style="height: 200px;">
                           <div class="text-center">
                             <v-icon size="48" color="grey-darken-1" class="mb-2">{{ getDocumentIcon(docType) }}</v-icon>
-                            <div class="text-body-2 text-grey-darken-1">{{ getFileExtension(docData.original_filename || '') }}</div>
+                            <div class="text-body-2 text-grey-darken-1">{{ getFileExtension(getDocumentFilename(docData)) }}</div>
                           </div>
                         </div>
                       </div>
@@ -218,8 +218,8 @@
                           </v-icon>
                           <div class="flex-grow-1">
                             <div class="text-body-1 font-weight-medium">{{ getDocumentTitle(docType) }}</div>
-                            <div class="text-caption text-grey-darken-1">{{ docData.original_filename || 'Unknown filename' }}</div>
-                            <div class="text-caption text-grey-darken-1" v-if="docData.bytes">{{ formatFileSize(docData.bytes) }}</div>
+                            <div class="text-caption text-grey-darken-1">{{ getDocumentFilename(docData) || 'Unknown filename' }}</div>
+                            <div class="text-caption text-grey-darken-1" v-if="getDocumentSize(docData)">{{ formatFileSize(getDocumentSize(docData)) }}</div>
                           </div>
                         </div>
                         
@@ -228,9 +228,10 @@
                             color="primary"
                             variant="outlined"
                             size="small"
-                            :href="docData.url"
+                            :href="getDocumentUrl(docData)"
                             target="_blank"
                             class="flex-grow-1"
+                            :disabled="!getDocumentUrl(docData)"
                           >
                             <v-icon class="me-2">mdi-download</v-icon>
                             Download
@@ -240,7 +241,8 @@
                             color="secondary"
                             variant="outlined"
                             size="small"
-                            @click="openDocumentPreview(docData.url)"
+                            @click="openDocumentPreview(getDocumentUrl(docData))"
+                            :disabled="!getDocumentUrl(docData)"
                           >
                             <v-icon>mdi-eye</v-icon>
                           </v-btn>
@@ -507,8 +509,7 @@ const getTrainingChipColor = (program) => {
   const colors = {
     BST: 'blue',
     SAT: 'green',
-    CCM_CMHBT: 'purple',
-    CCM_CMT: 'indigo',
+    CCM: 'purple',
     SDSD: 'orange',
     PSCRB: 'cyan',
     SB: 'teal',
@@ -521,8 +522,7 @@ const getTrainingProgramName = (program) => {
   const names = {
     BST: 'Basic Safety Training',
     SAT: 'Security Awareness Training',
-    CCM_CMHBT: 'Crowd & Crisis Management (CMHBT)',
-    CCM_CMT: 'Crowd & Crisis Management (CMT)',
+    CCM: 'Crowd & Crisis Management',
     SDSD: 'Ship Security Duties',
     PSCRB: 'Personnel Survival Craft & Rescue Boat',
     SB: 'Survival Boat',
@@ -593,8 +593,12 @@ const formatDate = (date) => {
 
 const isImageDocument = (docData) => {
   if (!docData) return false
+  
+  // Debug: log the document structure
+  console.log('Document data:', docData)
+  
   const format = docData.format || ''
-  const filename = docData.original_filename || ''
+  const filename = docData.original_filename || docData.filename || ''
   const imageFormats = ['jpg', 'jpeg', 'png', 'gif', 'webp']
   return imageFormats.includes(format.toLowerCase()) || 
          imageFormats.some(ext => filename.toLowerCase().endsWith(`.${ext}`))
@@ -611,6 +615,43 @@ const formatFileSize = (bytes) => {
   const sizes = ['Bytes', 'KB', 'MB', 'GB']
   const i = Math.floor(Math.log(bytes) / Math.log(1024))
   return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i]
+}
+
+// Helper functions to handle different document data structures
+const getDocumentUrl = (docData) => {
+  if (!docData) return null
+  // New format: { url, public_id, original_filename, bytes, format }
+  if (typeof docData === 'object' && docData.url) {
+    return docData.url
+  }
+  // Old format: string (filename) or cloudinaryUrl
+  if (typeof docData === 'string') {
+    return docData.startsWith('http') ? docData : null
+  }
+  // Legacy format: { cloudinaryUrl }
+  if (docData.cloudinaryUrl) {
+    return docData.cloudinaryUrl
+  }
+  return null
+}
+
+const getDocumentFilename = (docData) => {
+  if (!docData) return ''
+  if (typeof docData === 'object') {
+    return docData.original_filename || docData.filename || 'Unknown file'
+  }
+  if (typeof docData === 'string') {
+    return docData
+  }
+  return 'Unknown file'
+}
+
+const getDocumentSize = (docData) => {
+  if (!docData) return null
+  if (typeof docData === 'object') {
+    return docData.bytes || null
+  }
+  return null
 }
 
 const openDocumentPreview = (url) => {

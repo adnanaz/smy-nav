@@ -470,8 +470,7 @@ const getTrainingChipColor = (program) => {
   const colors = {
     BST: 'blue',
     SAT: 'green',
-    CCM_CMHBT: 'purple',
-    CCM_CMT: 'indigo',
+    CCM: 'purple',
     SDSD: 'orange',
     PSCRB: 'cyan',
     SB: 'teal',

@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
+import { useAuthStore } from '@/stores/auth-simple'
 
 // Import views
 import HomeView from '../views/HomeView.vue'
@@ -8,7 +8,10 @@ import RegisterView from '../views/auth/RegisterView.vue'
 import DashboardView from '../views/dashboard/DashboardView.vue'
 import ParticipantView from '../views/dashboard/ParticipantView.vue'
 import ParticipantCreateView from '../views/participants/ParticipantCreateView.vue'
+import DaftarDiklatView from '../views/participants/DaftarDiklatView.vue'
 import ProfileView from '../views/profile/ProfileView.vue'
+import InvoiceView from '../views/admin/InvoiceView.vue'
+import ScheduleView from '../views/admin/ScheduleView.vue'
 
 const routes = [
   {
@@ -36,11 +39,12 @@ const routes = [
     name: 'register',
     component: RegisterView,
     meta: { 
-      title: 'Register - SMY-NAV',
+      title: 'Daftar - SMY',
       requiresAuth: false,
       hideForAuth: true
     }
   },
+
   {
     path: '/dashboard',
     name: 'dashboard',
@@ -50,13 +54,14 @@ const routes = [
       requiresAuth: true 
     }
   },
+
   {
     path: '/participants',
     name: 'participants',
     component: ParticipantView,
     meta: { 
-      title: 'Master Peserta - SMY-NAV',
-      requiresAuth: true 
+      title: 'Peserta - SMY-NAV',
+      requiresAuth: true
     }
   },
   {
@@ -65,7 +70,38 @@ const routes = [
     component: ParticipantCreateView,
     meta: { 
       title: 'Tambah Peserta - SMY-NAV',
-      requiresAuth: true 
+      requiresAuth: true,
+      requiresRole: ['super_admin', 'admin', 'agent']
+    }
+  },
+  {
+    path: '/daftar-diklat',
+    name: 'daftar-diklat',
+    component: DaftarDiklatView,
+    meta: { 
+      title: 'Daftar Diklat - SMY-NAV',
+      requiresAuth: true,
+      requiresRole: ['participant']
+    }
+  },
+  {
+    path: '/admin/invoices',
+    name: 'admin-invoices',
+    component: InvoiceView,
+    meta: { 
+      title: 'Invoice Management - SMY-NAV',
+      requiresAuth: true,
+      requiresRole: ['super_admin', 'admin']
+    }
+  },
+  {
+    path: '/admin/schedules',
+    name: 'admin-schedules',
+    component: ScheduleView,
+    meta: { 
+      title: 'Schedule Management - SMY-NAV',
+      requiresAuth: true,
+      requiresRole: ['super_admin', 'admin']
     }
   },
   {
@@ -139,19 +175,27 @@ router.beforeEach(async (to, from, next) => {
     }
   }
   
+  // Helper function to get appropriate dashboard route based on role
+  const getDashboardRoute = () => {
+    // All users use the same dashboard now, just with different data
+    return 'dashboard'
+  }
+
   // Check if route should be hidden for authenticated users (login, register pages)
   if (to.meta.hideForAuth && authStore.isLoggedIn) {
     console.log('🔄 Redirecting authenticated user from', to.name, 'to dashboard')
-    next({ name: 'dashboard' })
+    next({ name: getDashboardRoute() })
     return
   }
   
   // Check if home route should redirect authenticated users
   if (to.meta.redirectIfAuth && authStore.isLoggedIn) {
     console.log('🔄 Redirecting authenticated user from home to dashboard')
-    next({ name: 'dashboard' })
+    next({ name: getDashboardRoute() })
     return
   }
+
+  // No need to redirect dashboard anymore - all roles use same dashboard
   
   // Check if route requires authentication
   if (to.meta.requiresAuth && !authStore.isLoggedIn) {

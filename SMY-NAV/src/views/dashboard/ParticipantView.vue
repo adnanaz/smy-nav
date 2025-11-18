@@ -1,5 +1,5 @@
 <template>
-  <DashboardLayout page-title="Master Peserta">
+  <DashboardLayout :page-title="pageTitle">
     <v-container fluid>
       <!-- Header -->
       <v-row class="mb-4">
@@ -7,7 +7,7 @@
           <div class="d-flex justify-space-between align-center">
             <div>
               <h1 class="text-h4 font-weight-bold mb-2">
-                Master Peserta
+                {{ pageTitle }}
                 <v-chip 
                   v-if="authStore.isAgent" 
                   color="blue" 
@@ -26,9 +26,21 @@
                 >
                   Admin
                 </v-chip>
+                <v-chip 
+                  v-if="authStore.isParticipant" 
+                  color="green" 
+                  variant="tonal" 
+                  size="small" 
+                  class="ml-3"
+                >
+                  Participant
+                </v-chip>
               </h1>
               <p class="text-subtitle-1 text-grey-darken-1">
-                <template v-if="authStore.isAgent">
+                <template v-if="authStore.isParticipant">
+                  Data pelatihan dan progress Anda
+                </template>
+                <template v-else-if="authStore.isAgent">
                   Kelola data peserta agency Anda
                 </template>
                 <template v-else>
@@ -36,15 +48,26 @@
                 </template>
               </p>
             </div>
-            <v-btn
-              v-if="authStore.isAgent"
-              color="primary"
-              prepend-icon="mdi-plus"
-              size="large"
-              @click="goToCreatePage"
-            >
-              Tambah Peserta
-            </v-btn>
+            <div class="d-flex gap-3">
+              <v-btn
+                v-if="authStore.isAgent"
+                color="primary"
+                prepend-icon="mdi-plus"
+                size="large"
+                @click="goToCreatePage"
+              >
+                Tambah Peserta
+              </v-btn>
+              <v-btn
+                v-if="isParticipant"
+                color="success"
+                prepend-icon="mdi-school-outline"
+                size="large"
+                @click="goToDaftarDiklat"
+              >
+                Pengajuan Diklat
+              </v-btn>
+            </div>
           </div>
         </v-col>
       </v-row>
@@ -58,10 +81,12 @@
                 v-model="search"
                 prepend-inner-icon="mdi-magnify"
                 label="Cari peserta..."
+                placeholder="Nama, NIK, atau No. Registrasi..."
                 variant="outlined"
                 density="compact"
                 clearable
-                @keyup.enter="fetchParticipants"
+                :loading="loading"
+                @keyup.enter="applyFilters"
               />
             </v-col>
             <v-col cols="12" md="3">
@@ -69,9 +94,11 @@
                 v-model="filterTrainingProgram"
                 :items="trainingProgramOptions"
                 label="Jenis Diklat"
+                placeholder="Pilih jenis diklat..."
                 variant="outlined"
                 density="compact"
                 clearable
+                :loading="loading"
                 item-title="text"
                 item-value="value"
               />
@@ -81,21 +108,35 @@
                 v-model="filterStatus"
                 :items="statusOptions"
                 label="Status"
+                placeholder="Pilih status..."
                 variant="outlined"
                 density="compact"
                 clearable
+                :loading="loading"
                 item-title="text"
                 item-value="value"
               />
             </v-col>
-            <v-col cols="12" md="2" class="d-flex align-center">
+            <v-col cols="12" md="2" class="d-flex align-center" style="gap: 8px;">
               <v-btn
                 color="primary"
                 variant="flat"
-                @click="fetchParticipants"
-                block
+                @click="applyFilters"
+                :loading="loading"
+                size="small"
               >
+                <v-icon start>mdi-filter</v-icon>
                 Filter
+              </v-btn>
+              <v-btn
+                color="grey"
+                variant="outlined"
+                @click="resetFilters"
+                size="small"
+                :disabled="!hasActiveFilters"
+              >
+                <v-icon start>mdi-filter-remove</v-icon>
+                Reset
               </v-btn>
             </v-col>
           </v-row>
@@ -104,6 +145,61 @@
 
       <!-- Data Table -->
       <v-card elevation="2">
+        <!-- Table Header with Filter Indicators -->
+        <v-card-title class="d-flex align-center justify-space-between pa-4">
+          <div class="d-flex align-center">
+            <v-icon class="mr-2" color="primary">mdi-account-group</v-icon>
+            <span class="text-h6">Daftar Peserta</span>
+            <v-chip
+              v-if="pagination.total > 0"
+              color="primary"
+              variant="tonal"
+              size="small"
+              class="ml-3"
+            >
+              {{ pagination.total }} peserta
+            </v-chip>
+          </div>
+          
+          <!-- Active Filters Indicator -->
+          <div v-if="hasActiveFilters" class="d-flex align-center gap-2">
+            <v-icon color="info" size="small">mdi-filter</v-icon>
+            <span class="text-caption text-info">Filter aktif:</span>
+            <v-chip
+              v-if="search"
+              color="info"
+              variant="outlined"
+              size="x-small"
+              closable
+              @click:close="clearSearchFilter"
+            >
+              "{{ search }}"
+            </v-chip>
+            <v-chip
+              v-if="filterTrainingProgram"
+              color="info"
+              variant="outlined"
+              size="x-small"
+              closable
+              @click:close="clearTrainingProgramFilter"
+            >
+              {{ trainingProgramOptions.find(opt => opt.value === filterTrainingProgram)?.text }}
+            </v-chip>
+            <v-chip
+              v-if="filterStatus"
+              color="info"
+              variant="outlined"
+              size="x-small"
+              closable
+              @click:close="clearStatusFilter"
+            >
+              {{ statusOptions.find(opt => opt.value === filterStatus)?.text }}
+            </v-chip>
+          </div>
+        </v-card-title>
+        
+        <v-divider />
+        
         <v-data-table
           :headers="headers"
           :items="participants"
@@ -166,6 +262,37 @@
             </v-chip>
           </template>
 
+          <!-- Schedule Info -->
+          <template #item.scheduleInfo="{ item }">
+            <div v-if="item.scheduleInfo && shouldShowSchedule(item.status)">
+              <div class="d-flex flex-column">
+                <v-chip
+                  :color="getCountdownColor(item.scheduleInfo.daysUntilStart)"
+                  size="small"
+                  variant="tonal"
+                  class="mb-1"
+                >
+                  {{ item.scheduleInfo.countdownText }}
+                </v-chip>
+                <span class="text-caption text-grey mb-1">
+                  {{ formatScheduleDate(item.scheduleInfo.startDate) }}
+                </span>
+                <v-btn
+                  size="x-small"
+                  variant="outlined"
+                  color="primary"
+                  @click="viewScheduleDetail(item.scheduleInfo)"
+                  prepend-icon="mdi-information"
+                >
+                  Detail Kelas
+                </v-btn>
+              </div>
+            </div>
+            <div v-else class="text-grey text-caption">
+              {{ getScheduleStatusText(item.status) }}
+            </div>
+          </template>
+
           <!-- Progress -->
           <template #item.progressPercentage="{ item }">
             <div class="d-flex align-center">
@@ -195,7 +322,7 @@
               </v-chip>
               <div v-else class="text-caption text-grey">-</div>
               
-              <!-- Payment Proof Indicator -->
+              <!-- Payment Proof Indicator for pay_now -->
               <div v-if="item.paymentOption === 'pay_now'" class="mt-1">
                 <v-chip
                   v-if="item.paymentProof"
@@ -216,15 +343,106 @@
                   Tidak ada Invoice Terlampir
                 </v-chip>
               </div>
+              
+              <!-- Payment Proof Indicator for pay_later -->
+              <div v-if="item.paymentOption === 'pay_later'" class="mt-1">
+                <v-chip
+                  v-if="item.paymentStatus === 'rejected'"
+                  color="error"
+                  variant="outlined"
+                  size="x-small"
+                  prepend-icon="mdi-close-circle"
+                >
+                  Ditolak - Perlu Upload Ulang
+                </v-chip>
+                <v-chip
+                  v-else-if="item.status === 'completed' && !item.paymentProof"
+                  color="error"
+                  variant="outlined"
+                  size="x-small"
+                  prepend-icon="mdi-alert-circle"
+                >
+                  Perlu Bayar
+                </v-chip>
+                <v-chip
+                  v-else-if="item.paymentProof && item.paymentStatus === 'pending'"
+                  color="warning"
+                  variant="outlined"
+                  size="x-small"
+                  prepend-icon="mdi-clock"
+                >
+                  Menunggu Verifikasi
+                </v-chip>
+                <v-chip
+                  v-else-if="item.paymentProof && item.paymentStatus === 'approved'"
+                  color="success"
+                  variant="outlined"
+                  size="x-small"
+                  prepend-icon="mdi-check"
+                >
+                  Sudah Bayar & Disetujui
+                </v-chip>
+                <v-chip
+                  v-else
+                  color="info"
+                  variant="outlined"
+                  size="x-small"
+                  prepend-icon="mdi-clock"
+                >
+                  Belum Waktunya
+                </v-chip>
+              </div>
+            </div>
+          </template>
+
+          <!-- Payment Status (Agent only - to see admin approval) -->
+          <template #item.paymentStatus="{ item }">
+            <div class="d-flex flex-column align-start">
+              <v-chip
+                v-if="item.paymentStatus && item.paymentOption"
+                :color="getPaymentStatusColor(item.paymentStatus)"
+                variant="tonal"
+                size="small"
+                class="mb-1"
+              >
+                {{ getPaymentStatusText(item.paymentStatus) }}
+              </v-chip>
+              <div v-else class="text-caption text-grey">-</div>
+              
+              <!-- Admin notes indicator for agents -->
+              <div v-if="item.adminNotes && authStore.isAgent" class="mt-1">
+                <v-tooltip location="bottom">
+                  <template #activator="{ props }">
+                    <v-chip
+                      v-bind="props"
+                      color="info"
+                      variant="outlined"
+                      size="x-small"
+                      prepend-icon="mdi-message-text"
+                      @click="showAdminNotes(item)"
+                      style="cursor: pointer;"
+                    >
+                      Ada Catatan
+                    </v-chip>
+                  </template>
+                  <span>Klik untuk lihat catatan admin</span>
+                </v-tooltip>
+              </div>
             </div>
           </template>
 
           <!-- Notes -->
-         <template #item.notes="{ item }">
-           <div class="text-caption">
-             {{ item.notes }}
-           </div>
-         </template>
+          <template #item.notes="{ item }">
+            <div class="text-caption">
+              <!-- Show different notes based on role -->
+              <template v-if="authStore.isAgent">
+                {{ item.notes || '-' }}
+              </template>
+              <template v-else>
+                {{ item.adminNotes || item.notes || '-' }}
+              </template>
+            </div>
+          </template>
 
           <!-- Created Date -->
           <template #item.createdAt="{ item }">
@@ -255,8 +473,60 @@
                 title="Lihat Bukti Transfer"
               />
               
+              <!-- Payment Upload Button for pay_later when completed -->
+              <template v-if="authStore.isAgent && item.paymentOption === 'pay_later' && item.status === 'completed'">
+                <v-btn
+                  v-if="!item.paymentProof || item.paymentStatus === 'rejected'"
+                  icon="mdi-upload"
+                  variant="text"
+                  size="small"
+                  :color="item.paymentStatus === 'rejected' ? 'error' : 'warning'"
+                  @click="uploadPayment(item)"
+                  :title="item.paymentStatus === 'rejected' ? 'Upload Ulang Bukti Pembayaran' : 'Upload Bukti Pembayaran'"
+                />
+                <v-btn
+                  v-else-if="item.paymentProof && item.paymentStatus !== 'rejected'"
+                  icon="mdi-invoice"
+                  variant="text"
+                  size="small"
+                  color="success"
+                  @click="viewPaymentProof(item)"
+                  title="Lihat Bukti Pembayaran"
+                />
+              </template>
+              
               <!-- Agent actions - only for draft status -->
               <template v-if="authStore.isAgent">
+                <v-btn
+                  icon="mdi-pencil"
+                  variant="text"
+                  size="small"
+                  @click="editParticipant(item)"
+                  :disabled="item.status !== 'draft'"
+                  title="Edit Data"
+                />
+                <v-btn
+                  icon="mdi-delete"
+                  variant="text"
+                  size="small"
+                  color="error"
+                  @click="deleteParticipant(item)"
+                  :disabled="item.status !== 'draft'"
+                  title="Hapus Data"
+                />
+                <v-btn
+                  v-if="item.status === 'draft'"
+                  icon="mdi-send"
+                  variant="text"
+                  size="small"
+                  color="primary"
+                  @click="submitParticipant(item)"
+                  title="Ajukan Data"
+                />
+              </template>
+
+              <!-- Participant actions - only for their own draft data -->
+              <template v-if="isParticipant">
                 <v-btn
                   icon="mdi-pencil"
                   variant="text"
@@ -321,8 +591,15 @@
           <template #no-data>
             <div class="text-center py-8">
               <v-icon size="64" color="grey-lighten-2" class="mb-4">mdi-account-group-outline</v-icon>
-              <div class="text-h6 text-grey-darken-1 mb-2">Tidak ada data peserta</div>
-              <div class="text-body-2 text-grey-darken-1">Klik tombol "Tambah Peserta" untuk memulai</div>
+              <div class="text-h6 text-grey-darken-1 mb-2">
+                {{ isParticipant ? 'Belum ada data pelatihan' : 'Tidak ada data peserta' }}
+              </div>
+              <div v-if="!isParticipant" class="text-body-2 text-grey-darken-1">
+                Klik tombol "Tambah Peserta" untuk memulai
+              </div>
+              <div v-else class="text-body-2 text-grey-darken-1">
+                Anda belum terdaftar dalam program pelatihan apapun
+              </div>
             </div>
           </template>
         </v-data-table>
@@ -432,7 +709,8 @@
               <small>
                 <strong>Nama File:</strong> {{ selectedParticipant.paymentProof.original_filename }}<br>
                 <strong>Format:</strong> {{ selectedParticipant.paymentProof.format?.toUpperCase() }}<br>
-                <strong>Ukuran:</strong> {{ formatFileSize(selectedParticipant.paymentProof.bytes) }}
+                <strong>Ukuran:</strong> {{ formatFileSize(selectedParticipant.paymentProof.bytes) }}<br>
+                <strong>Tanggal Upload:</strong> {{ formatDate(selectedParticipant.updatedAt || selectedParticipant.createdAt) }}
               </small>
             </div>
           </div>
@@ -458,6 +736,350 @@
       </v-card>
     </v-dialog>
 
+    <!-- Admin Notes Dialog -->
+    <v-dialog v-model="adminNotesDialog" max-width="500">
+      <v-card>
+        <v-card-title class="text-h6 d-flex align-center">
+          <v-icon class="me-2" color="info">mdi-message-text</v-icon>
+          Catatan Admin - {{ selectedParticipant?.fullName }}
+        </v-card-title>
+        <v-card-text>
+          <div class="mb-3">
+            <strong>Status Pembayaran:</strong>
+            <v-chip
+              :color="getPaymentStatusColor(selectedParticipant?.paymentStatus)"
+              variant="tonal"
+              size="small"
+              class="ml-2"
+            >
+              {{ getPaymentStatusText(selectedParticipant?.paymentStatus) }}
+            </v-chip>
+          </div>
+          
+          <div>
+            <strong>Catatan Admin:</strong>
+            <v-card 
+              variant="outlined" 
+              class="mt-2 pa-3"
+              :color="selectedParticipant?.paymentStatus === 'rejected' ? 'error' : 'info'"
+            >
+              <div class="text-body-2">
+                {{ selectedParticipant?.adminNotes || 'Tidak ada catatan khusus dari admin.' }}
+              </div>
+            </v-card>
+          </div>
+
+          <div v-if="selectedParticipant?.paymentApprovedAt || selectedParticipant?.paymentRejectedAt" class="mt-3">
+            <small class="text-grey-darken-1">
+              <template v-if="selectedParticipant?.paymentApprovedAt">
+                Disetujui pada: {{ formatDate(selectedParticipant.paymentApprovedAt) }}
+              </template>
+              <template v-else-if="selectedParticipant?.paymentRejectedAt">
+                Ditolak pada: {{ formatDate(selectedParticipant.paymentRejectedAt) }}
+              </template>
+            </small>
+          </div>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="adminNotesDialog = false">Tutup</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Payment Upload Dialog -->
+    <v-dialog v-model="paymentUploadDialog" max-width="500">
+      <v-card>
+        <v-card-title class="text-h6 d-flex align-center">
+          <v-icon class="me-2" color="warning">mdi-upload</v-icon>
+          Upload Bukti Pembayaran - {{ selectedParticipant?.fullName }}
+        </v-card-title>
+        <v-card-text>
+          <v-alert 
+            :type="selectedParticipant?.paymentStatus === 'rejected' ? 'error' : 'info'" 
+            variant="tonal" 
+            class="mb-4"
+          >
+            <template v-if="selectedParticipant?.paymentStatus === 'rejected'">
+              <strong>Pembayaran Ditolak:</strong> Silakan upload ulang bukti pembayaran yang benar.
+              <div v-if="selectedParticipant?.adminNotes" class="mt-2">
+                <strong>Alasan:</strong> {{ selectedParticipant.adminNotes }}
+              </div>
+            </template>
+            <template v-else>
+              <strong>Status:</strong> Dokumen sudah selesai diproses. Silakan upload bukti pembayaran untuk melengkapi proses pelatihan.
+            </template>
+          </v-alert>
+
+          <div class="mb-3">
+            <strong>Program Pelatihan:</strong> 
+            <v-chip 
+              :color="getTrainingChipColor(selectedParticipant?.trainingProgram)" 
+              variant="tonal" 
+              size="small" 
+              class="ml-2"
+            >
+              {{ getTrainingProgramName(selectedParticipant?.trainingProgram) }}
+            </v-chip>
+          </div>
+
+          <div class="mb-4">
+            <strong>Jumlah Pembayaran:</strong>
+            <div class="text-h6 text-success font-weight-bold mt-1">
+              {{ formatCurrency(calculatePaymentAmount(selectedParticipant?.trainingProgram)) }}
+            </div>
+          </div>
+
+          <v-file-input
+            v-model="paymentFile"
+            label="Bukti Pembayaran *"
+            variant="outlined"
+            prepend-icon="mdi-camera"
+            accept="image/*,application/pdf"
+            :rules="[v => !!v || 'Bukti pembayaran wajib diupload']"
+            show-size
+            class="mb-3"
+          >
+            <template #selection="{ fileNames }">
+              <template v-for="fileName in fileNames" :key="fileName">
+                {{ fileName }}
+              </template>
+            </template>
+          </v-file-input>
+
+          <v-alert type="warning" variant="outlined" class="text-caption">
+            <strong>Catatan:</strong> Upload bukti transfer/pembayaran dalam format JPG, PNG, atau PDF. Maksimal ukuran file 5MB.
+          </v-alert>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="paymentUploadDialog = false">Batal</v-btn>
+          <v-btn
+            color="primary"
+            @click="confirmPaymentUpload"
+            :loading="paymentUploadLoading"
+            :disabled="!paymentFile"
+          >
+            {{ selectedParticipant?.paymentStatus === 'rejected' ? 'Upload Ulang' : 'Upload Pembayaran' }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Schedule Detail Dialog -->
+    <v-dialog v-model="scheduleDetailDialog" max-width="700">
+      <v-card v-if="selectedSchedule">
+        <v-card-title class="d-flex align-center">
+          <v-icon left color="primary" class="mr-2">mdi-calendar-clock</v-icon>
+          <div>
+            <div class="text-h6">{{ selectedSchedule.scheduleName }}</div>
+            <div class="text-caption text-grey">{{ selectedSchedule.trainingProgram }} - Detail Jadwal Kelas</div>
+          </div>
+        </v-card-title>
+
+        <v-card-text>
+          <v-row>
+            <!-- Tanggal & Waktu -->
+            <v-col cols="12" md="6">
+              <div class="mb-4">
+                <div class="text-subtitle-2 text-primary mb-2">📅 Jadwal Pelaksanaan</div>
+                <v-card variant="outlined" class="pa-3">
+                  <div class="d-flex align-center mb-2">
+                    <v-icon class="mr-2" size="small">mdi-calendar-range</v-icon>
+                    <strong>Tanggal:</strong>
+                  </div>
+                  <div class="ml-6 mb-2">
+                    {{ formatDateRange(selectedSchedule.startDate, selectedSchedule.endDate) }}
+                  </div>
+                  
+                  <div v-if="selectedSchedule.startTime || selectedSchedule.endTime" class="d-flex align-center mb-2">
+                    <v-icon class="mr-2" size="small">mdi-clock-outline</v-icon>
+                    <strong>Waktu:</strong>
+                  </div>
+                  <div v-if="selectedSchedule.startTime || selectedSchedule.endTime" class="ml-6">
+                    {{ selectedSchedule.startTime || '08:00' }} - {{ selectedSchedule.endTime || '17:00' }} WIB
+                  </div>
+
+                  <!-- Countdown -->
+                  <v-divider class="my-2" />
+                  <div class="text-center">
+                    <v-chip
+                      :color="getCountdownColor(selectedSchedule.daysUntilStart)"
+                      variant="tonal"
+                      size="small"
+                    >
+                      <v-icon start size="small">mdi-timer-outline</v-icon>
+                      {{ selectedSchedule.countdownText }}
+                    </v-chip>
+                  </div>
+                </v-card>
+              </div>
+            </v-col>
+
+            <!-- Mode & Lokasi -->
+            <v-col cols="12" md="6">
+              <div class="mb-4">
+                <div class="text-subtitle-2 text-primary mb-2">📍 Lokasi & Mode</div>
+                <v-card variant="outlined" class="pa-3">
+                  <div class="d-flex align-center mb-2">
+                    <v-icon class="mr-2" size="small">mdi-laptop</v-icon>
+                    <strong>Mode:</strong>
+                  </div>
+                  <div class="ml-6 mb-2">
+                    <v-chip
+                      :color="getModeColor(selectedSchedule.mode)"
+                      size="small"
+                      variant="outlined"
+                    >
+                      <v-icon start :icon="getModeIcon(selectedSchedule.mode)" size="small" />
+                      {{ getModeText(selectedSchedule.mode) }}
+                    </v-chip>
+                  </div>
+
+                  <div v-if="selectedSchedule.location" class="d-flex align-center mb-2">
+                    <v-icon class="mr-2" size="small">mdi-map-marker</v-icon>
+                    <strong>Lokasi:</strong>
+                  </div>
+                  <div v-if="selectedSchedule.location" class="ml-6 mb-2">
+                    {{ selectedSchedule.location }}
+                  </div>
+
+                  <div v-if="selectedSchedule.onlineLink" class="d-flex align-center mb-2">
+                    <v-icon class="mr-2" size="small">mdi-video</v-icon>
+                    <strong>Link Meeting:</strong>
+                  </div>
+                  <div v-if="selectedSchedule.onlineLink" class="ml-6">
+                    <v-btn
+                      :href="selectedSchedule.onlineLink"
+                      target="_blank"
+                      size="small"
+                      variant="outlined"
+                      color="primary"
+                      prepend-icon="mdi-open-in-new"
+                    >
+                      Buka Link
+                    </v-btn>
+                  </div>
+                </v-card>
+              </div>
+            </v-col>
+
+            <!-- Dress Code -->
+            <v-col cols="12" v-if="selectedSchedule.dressCode">
+              <div class="mb-4">
+                <div class="text-subtitle-2 text-primary mb-2">👔 Dress Code</div>
+                <v-card variant="outlined" class="pa-3">
+                  <div class="d-flex align-center mb-2">
+                    <v-icon class="mr-2" size="small" color="primary">mdi-tshirt-crew</v-icon>
+                    <strong>Ketentuan Pakaian:</strong>
+                  </div>
+                  <div class="ml-6">
+                    {{ selectedSchedule.dressCode }}
+                  </div>
+                </v-card>
+              </div>
+            </v-col>
+
+            <!-- Perlengkapan -->
+            <v-col cols="12" v-if="selectedSchedule.requirements">
+              <div class="mb-4">
+                <div class="text-subtitle-2 text-primary mb-2">🎒 Perlengkapan yang Harus Dibawa</div>
+                <v-card variant="outlined" class="pa-3">
+                  <div class="d-flex align-center mb-2">
+                    <v-icon class="mr-2" size="small" color="warning">mdi-bag-checked</v-icon>
+                    <strong>Checklist Perlengkapan:</strong>
+                  </div>
+                  <div class="ml-6">
+                    <div v-for="item in parseRequirements(selectedSchedule.requirements)" :key="item" class="d-flex align-center mb-1">
+                      <v-icon class="mr-2" size="small" color="success">mdi-check-circle</v-icon>
+                      {{ item }}
+                    </div>
+                  </div>
+                </v-card>
+              </div>
+            </v-col>
+
+            <!-- Contact Person -->
+            <v-col cols="12" v-if="selectedSchedule.contactPerson || selectedSchedule.contactPhone">
+              <div class="mb-4">
+                <div class="text-subtitle-2 text-primary mb-2">📞 Kontak Informasi</div>
+                <v-card variant="outlined" class="pa-3">
+                  <div v-if="selectedSchedule.contactPerson" class="d-flex align-center mb-2">
+                    <v-icon class="mr-2" size="small">mdi-account</v-icon>
+                    <strong>Contact Person:</strong>
+                  </div>
+                  <div v-if="selectedSchedule.contactPerson" class="ml-6 mb-2">
+                    {{ selectedSchedule.contactPerson }}
+                  </div>
+
+                  <div v-if="selectedSchedule.contactPhone" class="d-flex align-center mb-2">
+                    <v-icon class="mr-2" size="small">mdi-phone</v-icon>
+                    <strong>Nomor Telepon:</strong>
+                  </div>
+                  <div v-if="selectedSchedule.contactPhone" class="ml-6">
+                    <v-btn
+                      :href="`tel:${selectedSchedule.contactPhone}`"
+                      size="small"
+                      variant="outlined"
+                      color="success"
+                      prepend-icon="mdi-phone"
+                    >
+                      {{ selectedSchedule.contactPhone }}
+                    </v-btn>
+                  </div>
+                </v-card>
+              </div>
+            </v-col>
+
+            <!-- Catatan Tambahan -->
+            <v-col cols="12" v-if="selectedSchedule.notes">
+              <div class="mb-4">
+                <div class="text-subtitle-2 text-primary mb-2">📝 Catatan Penting</div>
+                <v-card variant="outlined" class="pa-3">
+                  <div class="d-flex align-center mb-2">
+                    <v-icon class="mr-2" size="small" color="info">mdi-information</v-icon>
+                    <strong>Informasi Tambahan:</strong>
+                  </div>
+                  <div class="ml-6">
+                    {{ selectedSchedule.notes }}
+                  </div>
+                </v-card>
+              </div>
+            </v-col>
+          </v-row>
+
+          <!-- Important Notice -->
+          <v-alert type="info" variant="tonal" class="mt-4">
+            <div class="d-flex align-center">
+              <v-icon class="mr-2">mdi-lightbulb-on</v-icon>
+              <strong>Tips Penting:</strong>
+            </div>
+            <ul class="mt-2 ml-4">
+              <li>Harap datang 15 menit sebelum jadwal dimulai</li>
+              <li>Pastikan semua perlengkapan sudah disiapkan sebelum hari H</li>
+              <li>Simpan nomor kontak untuk komunikasi darurat</li>
+              <li v-if="selectedSchedule.mode === 'online' || selectedSchedule.mode === 'hybrid'">Pastikan koneksi internet stabil untuk kelas online</li>
+            </ul>
+          </v-alert>
+        </v-card-text>
+
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="scheduleDetailDialog = false">Tutup</v-btn>
+          <v-btn
+            v-if="selectedSchedule.contactPhone"
+            color="success"
+            variant="flat"
+            :href="`https://wa.me/${selectedSchedule.contactPhone.replace(/\D/g, '')}`"
+            target="_blank"
+            prepend-icon="mdi-whatsapp"
+          >
+            WhatsApp
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- Success Snackbar -->
     <v-snackbar
       v-model="snackbar.show"
@@ -470,7 +1092,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import DashboardLayout from '@/components/layout/DashboardLayout.vue'
 import ParticipantDetailDialog from '@/components/participants/ParticipantDetailDialog.vue'
@@ -495,7 +1117,13 @@ const deleteLoading = ref(false)
 const submitDialog = ref(false)
 const submitLoading = ref(false)
 const paymentProofDialog = ref(false)
+const adminNotesDialog = ref(false)
+const paymentUploadDialog = ref(false)
+const paymentUploadLoading = ref(false)
+const scheduleDetailDialog = ref(false)
 const selectedParticipant = ref(null)
+const selectedSchedule = ref(null)
+const paymentFile = ref(null)
 
 // Filters
 const search = ref('')
@@ -520,6 +1148,20 @@ const snackbar = ref({
 // Computed
 const participants = computed(() => participantStore.participants)
 const trainingTypes = computed(() => participantStore.trainingTypes)
+
+// Check if current user is participant
+const isParticipant = computed(() => authStore.user?.role === 'participant')
+
+
+// Dynamic page title based on role
+const pageTitle = computed(() => {
+  return isParticipant.value ? 'Data Saya' : 'Master Peserta'
+})
+
+// Check if any filters are active
+const hasActiveFilters = computed(() => {
+  return !!(search.value || filterTrainingProgram.value || filterStatus.value)
+})
 
 // Table headers - computed to include agency column for admin
 const headers = computed(() => {
@@ -563,17 +1205,36 @@ const headers = computed(() => {
       width: '120px'
     },
     {
-      title: 'Progress',
-      key: 'progressPercentage',
-      sortable: true,
-      width: '120px'
+      title: 'Jadwal Kelas',
+      key: 'scheduleInfo',
+      sortable: false,
+      width: '150px'
     },
+    // {
+    //   title: 'Progress',
+    //   key: 'progressPercentage',
+    //   sortable: true,
+    //   width: '120px'
+    // },
     {
       title: 'Pembayaran',
       key: 'paymentOption',
       sortable: false,
       width: '150px'
-    },
+    }
+  )
+
+  // Add payment status for agents (to see admin approval)
+  if (authStore.isAgent || isParticipant.value) {
+    baseHeaders.push({
+      title: 'Status Invoice',
+      key: 'paymentStatus',
+      sortable: false,
+      width: '130px'
+    })
+  }
+
+  baseHeaders.push(
     {
       title: 'Catatan',
       key: 'notes',
@@ -624,10 +1285,13 @@ const statusOptions = computed(() => {
   // Filter options based on user role
   if (authStore.isAgent) {
     // Agent can see draft and submitted status
-    return baseOptions.filter(option => ['draft', 'submitted'].includes(option.value))
-  } else if (authStore.isAdmin) {
-    // Admin can see all status except draft (draft is only for agents)
     return baseOptions.filter(option => option.value !== 'draft')
+  } else if (authStore.isAdmin) {
+    // Admin can see all status except draft (draft is only for agents/participants)
+    return baseOptions.filter(option => option.value !== 'draft')
+  } else if (authStore.isParticipant) {
+    // Participant can see all their own status including draft
+    return baseOptions
   }
 
   return baseOptions
@@ -661,6 +1325,9 @@ const fetchParticipants = async () => {
     } else if (authStore.isAgent) {
       // Agent hanya melihat data mereka sendiri
       params.agencyOnly = true
+    } else if (isParticipant.value) {
+      // Participant hanya melihat data mereka sendiri
+      params.participantOnly = true
     }
 
     const response = await participantStore.fetchParticipants(params)
@@ -695,14 +1362,24 @@ const goToCreatePage = () => {
   router.push('/participants/create')
 }
 
+const goToDaftarDiklat = () => {
+  router.push('/daftar-diklat')
+}
+
 const viewParticipant = (participant) => {
   selectedParticipant.value = participant
   detailDialog.value = true
 }
 
 const editParticipant = (participant) => {
-  selectedParticipant.value = participant
-  editDialog.value = true
+  if (authStore.isParticipant) {
+    // Participant diarahkan ke form daftar diklat dalam mode edit
+    router.push(`/daftar-diklat?edit=${participant.id}`)
+  } else {
+    // Agent/Admin menggunakan dialog edit
+    selectedParticipant.value = participant
+    editDialog.value = true
+  }
 }
 
 const updateProgress = (participant) => {
@@ -713,6 +1390,51 @@ const updateProgress = (participant) => {
 const viewPaymentProof = (participant) => {
   selectedParticipant.value = participant
   paymentProofDialog.value = true
+}
+
+const showAdminNotes = (participant) => {
+  selectedParticipant.value = participant
+  adminNotesDialog.value = true
+}
+
+const uploadPayment = (participant) => {
+  selectedParticipant.value = participant
+  paymentFile.value = null
+  paymentUploadDialog.value = true
+}
+
+const viewScheduleDetail = (scheduleInfo) => {
+  selectedSchedule.value = scheduleInfo
+  scheduleDetailDialog.value = true
+}
+
+const confirmPaymentUpload = async () => {
+  if (!paymentFile.value) {
+    showSnackbar('Pilih file bukti pembayaran terlebih dahulu', 'error')
+    return
+  }
+
+  paymentUploadLoading.value = true
+  try {
+    // Prepare data for participant store (not FormData directly)
+    const updateData = {
+      files: {
+        payment_proof: paymentFile.value
+      }
+    }
+
+    // Update participant with payment proof
+    await participantStore.updateParticipant(selectedParticipant.value.id, updateData)
+    
+    showSnackbar('Bukti pembayaran berhasil diupload', 'success')
+    paymentUploadDialog.value = false
+    await fetchParticipants()
+  } catch (error) {
+    showSnackbar('Gagal mengupload bukti pembayaran', 'error')
+    console.error('Payment upload error:', error)
+  } finally {
+    paymentUploadLoading.value = false
+  }
 }
 
 const submitParticipant = (participant) => {
@@ -819,6 +1541,35 @@ const handleLimitChange = (limit) => {
   fetchParticipants()
 }
 
+const applyFilters = () => {
+  pagination.value.page = 1 // Reset to first page when applying filters
+  fetchParticipants()
+}
+
+const resetFilters = () => {
+  search.value = ''
+  filterTrainingProgram.value = ''
+  filterStatus.value = ''
+  pagination.value.page = 1
+  fetchParticipants()
+  showSnackbar('Filter berhasil direset', 'info')
+}
+
+const clearSearchFilter = () => {
+  search.value = ''
+  applyFilters()
+}
+
+const clearTrainingProgramFilter = () => {
+  filterTrainingProgram.value = ''
+  applyFilters()
+}
+
+const clearStatusFilter = () => {
+  filterStatus.value = ''
+  applyFilters()
+}
+
 const showSnackbar = (message, color = 'success') => {
   snackbar.value = {
     show: true,
@@ -845,8 +1596,7 @@ const getTrainingChipColor = (program) => {
   const colors = {
     BST: 'blue',
     SAT: 'green',
-    CCM_CMHBT: 'purple',
-    CCM_CMT: 'indigo',
+    CCM: 'purple',
     SDSD: 'orange',
     PSCRB: 'cyan',
     SB: 'teal',
@@ -906,6 +1656,48 @@ const getPaymentText = (paymentOption) => {
   return texts[paymentOption] || '-'
 }
 
+const getPaymentStatusColor = (paymentStatus) => {
+  const colors = {
+    pending: 'warning',
+    approved: 'success',
+    rejected: 'error'
+  }
+  return colors[paymentStatus] || 'grey'
+}
+
+const getPaymentStatusText = (paymentStatus) => {
+  const texts = {
+    pending: 'Menunggu Verifikasi',
+    approved: 'Disetujui',
+    rejected: 'Ditolak'
+  }
+  return texts[paymentStatus] || '-'
+}
+
+// Schedule utility functions
+const shouldShowSchedule = (status) => {
+  const submittedStatuses = ['submitted', 'verified', 'waiting_quota', 'sent_to_center', 'waiting_dispatch', 'completed']
+  return submittedStatuses.includes(status)
+}
+
+const getScheduleStatusText = (status) => {
+  if (status === 'draft') return 'Belum submit'
+  if (!shouldShowSchedule(status)) return 'Belum tersedia'
+  return 'Tidak ada jadwal'
+}
+
+const getCountdownColor = (daysUntilStart) => {
+  if (daysUntilStart <= 0) return 'success'
+  if (daysUntilStart <= 3) return 'warning'
+  if (daysUntilStart <= 7) return 'info'
+  return 'grey'
+}
+
+const formatScheduleDate = (date) => {
+  if (!date) return '-'
+  return format(new Date(date), 'dd MMM', { locale: idLocale })
+}
+
 const formatDate = (date) => {
   if (!date) return '-'
   return format(new Date(date), 'dd MMM yyyy', { locale: idLocale })
@@ -924,6 +1716,111 @@ const formatFileSize = (bytes) => {
   const i = Math.floor(Math.log(bytes) / Math.log(k))
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
+
+const calculatePaymentAmount = (trainingProgram) => {
+  const trainingPrices = {
+    BST: 1850000,          // 1jt 850rb
+    SAT: 950000,           // 950rb
+    CCM_CMT: 650000,       // 650rb
+    CCM_CMHBT: 650000,     // 650rb
+    SDSD: 950000,          // 950rb
+    PSCRB: 1200000,        // 1jt 200rb
+    SB: 500000,            // Seaman Book (estimasi)
+    UPDATING_BST: 750000   // Updating BST (estimasi)
+  }
+  return trainingPrices[trainingProgram] || 0
+}
+
+const formatCurrency = (amount) => {
+  return new Intl.NumberFormat('id-ID', {
+    style: 'currency',
+    currency: 'IDR',
+    minimumFractionDigits: 0
+  }).format(amount)
+}
+
+// Schedule detail utility functions
+const formatDateRange = (startDate, endDate) => {
+  const start = new Date(startDate)
+  const end = new Date(endDate)
+  
+  if (start.toDateString() === end.toDateString()) {
+    return format(start, 'EEEE, dd MMMM yyyy', { locale: idLocale })
+  }
+  
+  return `${format(start, 'dd MMM', { locale: idLocale })} - ${format(end, 'dd MMM yyyy', { locale: idLocale })}`
+}
+
+const getModeColor = (mode) => {
+  const colors = {
+    offline: 'blue',
+    online: 'green',
+    hybrid: 'orange'
+  }
+  return colors[mode] || 'grey'
+}
+
+const getModeIcon = (mode) => {
+  const icons = {
+    offline: 'mdi-school',
+    online: 'mdi-video',
+    hybrid: 'mdi-television-guide'
+  }
+  return icons[mode] || 'mdi-help'
+}
+
+const getModeText = (mode) => {
+  const texts = {
+    offline: 'Offline (Tatap Muka)',
+    online: 'Online (Virtual)',
+    hybrid: 'Hybrid (Campuran)'
+  }
+  return texts[mode] || mode
+}
+
+const parseRequirements = (requirements) => {
+  if (!requirements) return []
+  
+  // Split by common separators and clean up
+  const items = requirements
+    .split(/[,;\n]/)
+    .map(item => item.trim())
+    .filter(item => item.length > 0)
+    
+  return items.length > 0 ? items : [requirements]
+}
+
+// Debounced search
+let searchTimeout
+const debounceSearch = () => {
+  clearTimeout(searchTimeout)
+  searchTimeout = setTimeout(() => {
+    pagination.value.page = 1 // Reset to first page
+    fetchParticipants()
+  }, 500)
+}
+
+// Watchers
+watch(search, (newValue, oldValue) => {
+  // Only trigger search if there's actual change and not just clearing
+  if (newValue !== oldValue) {
+    debounceSearch()
+  }
+})
+
+watch(filterTrainingProgram, (newValue, oldValue) => {
+  if (newValue !== oldValue) {
+    pagination.value.page = 1 // Reset to first page
+    fetchParticipants()
+  }
+})
+
+watch(filterStatus, (newValue, oldValue) => {
+  if (newValue !== oldValue) {
+    pagination.value.page = 1 // Reset to first page
+    fetchParticipants()
+  }
+})
 
 // Lifecycle
 onMounted(() => {

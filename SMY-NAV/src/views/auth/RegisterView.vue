@@ -14,16 +14,42 @@
             <div class="register-brand-content text-center">
               <v-img
                 src="/src/assets/logo.svg"
-                alt="SMY-NAV Logo"
-                max-width="100"
-                class="mb-4 mx-auto"
+                alt="SMY Logo"
+                max-width="120"
+                class="mb-6 mx-auto"
               ></v-img>
-              <h1 class="text-h4 font-weight-bold text-white mb-3">
-                Join SMY-NAV
+              <h1 class="text-h3 font-weight-bold text-white mb-4">
+                Selamat Datang di SMY
               </h1>
-              <p class="text-body-1 text-white mb-4 opacity-90">
-                Start managing maritime training efficiently
+              <p class="text-h6 text-white mb-6 opacity-90">
+                Platform Pelatihan Profesional Terdepan
               </p>
+              <v-list class="bg-transparent">
+                <v-list-item class="text-white mb-2">
+                  <template v-slot:prepend>
+                    <v-icon color="white" class="me-3">mdi-check-circle</v-icon>
+                  </template>
+                  <v-list-item-title>Pelatihan Berkualitas Internasional</v-list-item-title>
+                </v-list-item>
+                <v-list-item class="text-white mb-2">
+                  <template v-slot:prepend>
+                    <v-icon color="white" class="me-3">mdi-check-circle</v-icon>
+                  </template>
+                  <v-list-item-title>Sertifikat Resmi Terakreditasi</v-list-item-title>
+                </v-list-item>
+                <v-list-item class="text-white mb-2">
+                  <template v-slot:prepend>
+                    <v-icon color="white" class="me-3">mdi-check-circle</v-icon>
+                  </template>
+                  <v-list-item-title>Instruktur Berpengalaman</v-list-item-title>
+                </v-list-item>
+                <v-list-item class="text-white">
+                  <template v-slot:prepend>
+                    <v-icon color="white" class="me-3">mdi-check-circle</v-icon>
+                  </template>
+                  <v-list-item-title>Fasilitas Training Modern</v-list-item-title>
+                </v-list-item>
+              </v-list>
             </div>
           </v-col>
 
@@ -44,35 +70,35 @@
                 <div class="text-center mb-4 d-md-none">
                   <v-img
                     src="/src/assets/logo.svg"
-                    alt="SMY-NAV Logo"
+                    alt="SMY Logo"
                     max-width="60"
                     class="mx-auto mb-3"
                   ></v-img>
-                  <h2 class="text-h6 font-weight-bold primary--text">
-                    SMY-NAV Registration
+                  <h2 class="text-h6 font-weight-bold text-primary">
+                    Daftar Pelatihan SMY
                   </h2>
                 </div>
 
                 <!-- Register Header -->
-                <div class="text-center mb-4">
-                  <h2 class="text-h5 font-weight-bold mb-2">
-                    Create Account
+                <div class="text-center mb-6">
+                  <h2 class="text-h4 font-weight-bold text-primary mb-2">
+                    Daftar Sekarang
                   </h2>
-                  <p class="text-body-2 text-medium-emphasis">
-                    Fill in the details below to get started
+                  <p class="text-body-1 text-grey">
+                    Mulai perjalanan pembelajaran profesional Anda bersama SMY
                   </p>
                 </div>
 
-                <!-- Error Alert -->
+                                <!-- Error Alert -->
                 <v-alert
-                  v-if="authStore.error"
+                  v-if="errorMessage"
                   type="error"
                   variant="tonal"
                   class="mb-4"
                   closable
-                  @click:close="authStore.clearError()"
+                  @click:close="errorMessage = ''"
                 >
-                  {{ authStore.error }}
+                  {{ errorMessage }}
                 </v-alert>
 
                 <!-- Register Form -->
@@ -81,137 +107,146 @@
                   v-model="valid"
                   @submit.prevent="handleRegister"
                 >
-                  <v-row>
-                    <v-col cols="12" sm="6">
-                      <v-text-field
-                        v-model="registerData.username"
-                        label="Username"
-                        prepend-inner-icon="mdi-account"
-                        :rules="usernameRules"
-                        :disabled="authStore.isLoading"
-                        autocomplete="username"
-                        class="mb-2"
-                      ></v-text-field>
-                    </v-col>
-                    <v-col cols="12" sm="6">
-                      <v-text-field
-                        v-model="registerData.fullName"
-                        label="Full Name"
-                        prepend-inner-icon="mdi-account-circle"
-                        :rules="fullNameRules"
-                        :disabled="authStore.isLoading"
-                        autocomplete="name"
-                        class="mb-2"
-                      ></v-text-field>
-                    </v-col>
-                  </v-row>
+                  <!-- Nama Lengkap -->
+                  <v-text-field
+                    v-model="registerData.fullName"
+                    label="Nama Lengkap"
+                    prepend-inner-icon="mdi-account-outline"
+                    :rules="fullNameRules"
+                    :disabled="loading"
+                    variant="outlined"
+                    class="mb-3"
+                    required
+                  ></v-text-field>
 
+                  <!-- Email -->
                   <v-text-field
                     v-model="registerData.email"
-                    label="Email Address"
+                    label="Email"
                     type="email"
-                    prepend-inner-icon="mdi-email"
+                    prepend-inner-icon="mdi-email-outline"
                     :rules="emailRules"
-                    :disabled="authStore.isLoading"
-                    autocomplete="email"
-                    class="mb-2"
+                    :disabled="loading"
+                    variant="outlined"
+                    class="mb-3"
+                    required
                   ></v-text-field>
 
+                  <!-- Nomor HP -->
+                  <v-text-field
+                    v-model="registerData.phone"
+                    label="Nomor HP"
+                    prepend-inner-icon="mdi-phone-outline"
+                    :rules="phoneRules"
+                    :disabled="loading"
+                    variant="outlined"
+                    class="mb-3"
+                    placeholder="08xxxxxxxxxx"
+                    required
+                  ></v-text-field>
+
+                  <!-- Dari mana mengetahui SMY -->
                   <v-select
-                    v-model="registerData.role"
-                    :items="roleOptions"
-                    label="Role"
-                    prepend-inner-icon="mdi-shield-account"
-                    :rules="roleRules"
-                    :disabled="authStore.isLoading"
-                    class="mb-2"
+                    v-model="registerData.source"
+                    :items="sourceOptions"
+                    label="Dari mana Anda mengetahui SMY?"
+                    prepend-inner-icon="mdi-information-outline"
+                    :rules="sourceRules"
+                    :disabled="loading"
+                    variant="outlined"
+                    class="mb-3"
+                    required
                   ></v-select>
 
-                  <v-select
-                    v-if="registerData.role && registerData.role !== 'super_admin'"
-                    v-model="registerData.agencyId"
-                    :items="agencyOptions"
-                    label="Agency"
-                    prepend-inner-icon="mdi-office-building"
-                    :rules="agencyRules"
-                    :disabled="authStore.isLoading"
-                    :loading="loadingAgencies"
-                    class="mb-2"
-                  ></v-select>
-
+                  <!-- Password -->
                   <v-text-field
                     v-model="registerData.password"
-                    :label="'Password'"
+                    label="Password"
                     :type="showPassword ? 'text' : 'password'"
-                    prepend-inner-icon="mdi-lock"
+                    prepend-inner-icon="mdi-lock-outline"
                     :append-inner-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
                     :rules="passwordRules"
-                    :disabled="authStore.isLoading"
-                    autocomplete="new-password"
-                    class="mb-2"
+                    :disabled="loading"
+                    variant="outlined"
+                    class="mb-3"
                     @click:append-inner="showPassword = !showPassword"
+                    required
                   ></v-text-field>
 
+                  <!-- Confirm Password -->
                   <v-text-field
                     v-model="confirmPassword"
-                    :label="'Confirm Password'"
+                    label="Konfirmasi Password"
                     :type="showConfirmPassword ? 'text' : 'password'"
-                    prepend-inner-icon="mdi-lock-check"
+                    prepend-inner-icon="mdi-lock-check-outline"
                     :append-inner-icon="showConfirmPassword ? 'mdi-eye' : 'mdi-eye-off'"
                     :rules="confirmPasswordRules"
-                    :disabled="authStore.isLoading"
-                    autocomplete="new-password"
-                    class="mb-3"
+                    :disabled="loading"
+                    variant="outlined"
+                    class="mb-4"
                     @click:append-inner="showConfirmPassword = !showConfirmPassword"
+                    required
                   ></v-text-field>
 
+                  <!-- Captcha -->
+                  <div class="mb-4">
+                    <h3 class="text-body-1 font-weight-medium mb-3">
+                      <v-icon class="me-2">mdi-shield-check</v-icon>
+                      Verifikasi Keamanan
+                    </h3>
+                    <SimpleCaptcha
+                      ref="captchaRef"
+                      @captcha-valid="onCaptchaValid"
+                    />
+                  </div>
+
+                  <!-- Privacy Policy -->
                   <v-checkbox
                     v-model="acceptTerms"
                     :rules="termsRules"
-                    density="compact"
                     class="mb-4"
+                    required
                   >
-                    <template #label>
+                    <template v-slot:label>
                       <span class="text-body-2">
-                        I agree to the 
-                        <a href="#" class="text-primary text-decoration-none">Terms of Service</a>
-                        and 
-                        <a href="#" class="text-primary text-decoration-none">Privacy Policy</a>
+                        Saya setuju dengan 
+                        <a href="#" class="text-primary text-decoration-none">
+                          Syarat & Ketentuan
+                        </a> 
+                        dan 
+                        <a href="#" class="text-primary text-decoration-none">
+                          Kebijakan Privasi
+                        </a>
                       </span>
                     </template>
                   </v-checkbox>
 
+                  <!-- Submit Button -->
                   <v-btn
                     type="submit"
                     block
                     size="large"
                     color="primary"
-                    :loading="authStore.isLoading"
-                    :disabled="!valid"
+                    :loading="loading"
+                    :disabled="!valid || !captchaValid"
                     class="mb-4"
                   >
-                    Create Account
+                    <v-icon class="me-2">mdi-account-plus</v-icon>
+                    Daftar Sekarang
                   </v-btn>
                 </v-form>
 
-                <!-- Divider -->
-                <v-divider class="my-4">
-                  <span class="text-medium-emphasis px-4">or</span>
-                </v-divider>
-
                 <!-- Login Link -->
                 <div class="text-center">
-                  <p class="text-body-2 text-medium-emphasis mb-2">
-                    Already have an account?
-                  </p>
-                  <v-btn
-                    variant="outlined"
-                    color="primary"
-                    block
-                    @click="$router.push('/login')"
-                  >
-                    Sign In
-                  </v-btn>
+                  <span class="text-body-2 text-grey">
+                    Sudah punya akun? 
+                    <router-link 
+                      to="/login" 
+                      class="text-primary text-decoration-none font-weight-medium"
+                    >
+                      Masuk di sini
+                    </router-link>
+                  </span>
                 </div>
               </v-card-text>
             </v-card>
@@ -219,145 +254,185 @@
         </v-row>
       </v-container>
     </v-main>
+
+    <!-- Success Dialog -->
+    <v-dialog v-model="showSuccessDialog" max-width="500" persistent>
+      <v-card>
+        <v-card-title class="text-center pa-6">
+          <v-icon size="64" color="success" class="mb-4">mdi-check-circle</v-icon>
+          <h3 class="text-h5 font-weight-bold">Registrasi Berhasil!</h3>
+        </v-card-title>
+        <v-card-text class="text-center pb-6">
+          <p class="text-body-1 mb-4">
+            Selamat datang di SMY, <strong>{{ registerData.fullName }}</strong>!
+          </p>
+          <p class="text-body-2 text-grey">
+            Akun Anda telah berhasil dibuat. Silakan login untuk mengakses dashboard 
+            dan melihat informasi pelatihan yang tersedia.
+          </p>
+        </v-card-text>
+        <v-card-actions class="pa-6 pt-0">
+          <v-btn
+            color="primary"
+            block
+            size="large"
+            @click="goToLogin"
+          >
+            Masuk ke Dashboard
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </v-app>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, computed, watch } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
+import { ref, reactive } from 'vue'
+import { useRouter } from 'vue-router'
+import SimpleCaptcha from '@/components/SimpleCaptcha.vue'
 import axios from 'axios'
 
 const router = useRouter()
-const route = useRoute()
-const authStore = useAuthStore()
+
+// Configure axios base URL
+axios.defaults.baseURL = 'http://localhost:3000'
 
 // Form data
 const registerData = reactive({
-  username: '',
   fullName: '',
   email: '',
-  password: '',
-  role: '',
-  agencyId: null
+  phone: '',
+  source: '',
+  password: ''
 })
 
 // Form state
 const valid = ref(false)
+const loading = ref(false)
 const showPassword = ref(false)
 const showConfirmPassword = ref(false)
 const confirmPassword = ref('')
 const acceptTerms = ref(false)
+const captchaValid = ref(false)
+const errorMessage = ref('')
+const showSuccessDialog = ref(false)
 const registerForm = ref(null)
-const loadingAgencies = ref(false)
-const agencies = ref([])
+const captchaRef = ref(null)
 
-// Role options
-const roleOptions = [
-  { title: 'Super Admin', value: 'super_admin' },
-  { title: 'Agency Admin', value: 'admin' },
-  { title: 'Agent', value: 'agent' }
+// Source options
+const sourceOptions = [
+  'WhatsApp',
+  'Instagram', 
+  'Facebook',
+  'LinkedIn',
+  'Website SMY',
+  'Google Search',
+  'Referral Teman',
+  'Referral Perusahaan',
+  'Brosur/Flyer',
+  'Pameran/Event',
+  'Lainnya'
 ]
-
-// Computed properties
-const agencyOptions = computed(() => 
-  agencies.value.map(agency => ({
-    title: agency.name,
-    value: agency.id
-  }))
-)
 
 // Validation rules
-const usernameRules = [
-  v => !!v || 'Username is required',
-  v => v.length >= 3 || 'Username must be at least 3 characters',
-  v => /^[a-zA-Z0-9_]+$/.test(v) || 'Username can only contain letters, numbers, and underscores'
-]
-
 const fullNameRules = [
-  v => !!v || 'Full name is required',
-  v => v.length >= 2 || 'Full name must be at least 2 characters'
+  v => !!v || 'Nama lengkap wajib diisi',
+  v => (v && v.length >= 3) || 'Nama minimal 3 karakter',
+  v => (v && v.length <= 100) || 'Nama maksimal 100 karakter'
 ]
 
 const emailRules = [
-  v => !!v || 'Email is required',
-  v => /.+@.+\..+/.test(v) || 'Email must be valid'
+  v => !!v || 'Email wajib diisi',
+  v => /.+@.+\..+/.test(v) || 'Format email tidak valid'
 ]
 
-const roleRules = [
-  v => !!v || 'Role is required'
+const phoneRules = [
+  v => !!v || 'Nomor HP wajib diisi',
+  v => /^(\+62|62|0)[0-9]{9,13}$/.test(v.replace(/[\s-]/g, '')) || 'Format nomor HP tidak valid'
 ]
 
-const agencyRules = [
-  v => registerData.role === 'super_admin' || !!v || 'Agency is required'
+const sourceRules = [
+  v => !!v || 'Sumber informasi wajib dipilih'
 ]
 
 const passwordRules = [
-  v => !!v || 'Password is required',
-  v => v.length >= 6 || 'Password must be at least 6 characters',
-  v => /(?=.*[a-z])/.test(v) || 'Password must contain at least one lowercase letter',
-  v => /(?=.*[A-Z])/.test(v) || 'Password must contain at least one uppercase letter',
-  v => /(?=.*\d)/.test(v) || 'Password must contain at least one number'
+  v => !!v || 'Password wajib diisi',
+  v => (v && v.length >= 6) || 'Password minimal 6 karakter',
+  v => /(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(v) || 'Password harus mengandung huruf besar, huruf kecil, dan angka'
 ]
 
 const confirmPasswordRules = [
-  v => !!v || 'Please confirm your password',
-  v => v === registerData.password || 'Passwords do not match'
+  v => !!v || 'Konfirmasi password wajib diisi',
+  v => v === registerData.password || 'Password tidak cocok'
 ]
 
 const termsRules = [
-  v => !!v || 'You must accept the terms and conditions'
+  v => !!v || 'Anda harus menyetujui syarat dan ketentuan'
 ]
 
-// Watch role changes to reset agency selection
-watch(() => registerData.role, (newRole) => {
-  if (newRole === 'super_admin') {
-    registerData.agencyId = null
-  }
-})
+// Captcha handlers
+const onCaptchaValid = (isValid) => {
+  captchaValid.value = isValid
+}
 
-// Load agencies
-const loadAgencies = async () => {
-  loadingAgencies.value = true
-  try {
-    // TODO: Replace with actual API call
-    // const response = await axios.get('/agencies')
-    // agencies.value = response.data.data
-    
-    // Mock data for now
-    agencies.value = [
-      { id: '550e8400-e29b-41d4-a716-446655440001', name: 'PT. Maritime Solutions' },
-      { id: '550e8400-e29b-41d4-a716-446655440002', name: 'CV. Ocean Careers' },
-      { id: '550e8400-e29b-41d4-a716-446655440003', name: 'PT. Pelaut Nusantara' }
-    ]
-  } catch (error) {
-    console.error('Failed to load agencies:', error)
-  } finally {
-    loadingAgencies.value = false
-  }
+// Navigate to login
+const goToLogin = () => {  
+  showSuccessDialog.value = false
+  router.push('/login')
 }
 
 // Handle registration
 const handleRegister = async () => {
-  if (!valid.value) return
+  if (!valid.value || !captchaValid.value) return
 
-  const userData = { ...registerData }
-  if (userData.role === 'super_admin') {
-    delete userData.agencyId
-  }
-
-  const result = await authStore.register(userData)
+  loading.value = true
+  errorMessage.value = ''
   
-  if (result.success) {
-    // Redirect to dashboard
-    router.push('/dashboard')
+  try {
+    const response = await axios.post('/api/auth/register-participant', {
+      fullName: registerData.fullName,
+      email: registerData.email,
+      phone: registerData.phone,
+      source: registerData.source,
+      password: registerData.password,
+      // These fields are required by backend but will be filled with defaults
+      birthDate: new Date(1990, 0, 1).toISOString().split('T')[0], // Default birthdate
+      occupation: 'Tidak disebutkan',
+      company: 'Tidak disebutkan',
+      interestedProgram: 'Pelatihan Umum'
+    })
+
+    if (response.data.success) {
+      // Show success dialog
+      showSuccessDialog.value = true
+      
+      // Reset form
+      registerData.fullName = ''
+      registerData.email = ''
+      registerData.phone = ''
+      registerData.source = ''
+      registerData.password = ''
+      confirmPassword.value = ''
+      acceptTerms.value = false
+      captchaRef.value?.resetCaptcha()
+    }
+  } catch (error) {
+    console.error('Registration error:', error)
+    
+    // Handle validation errors
+    if (error.response?.data?.error?.details) {
+      const errors = error.response.data.error.details
+      errorMessage.value = errors.map(e => e.msg).join(', ')
+    } else {
+      errorMessage.value = error.response?.data?.error?.message || 'Terjadi kesalahan saat registrasi. Silakan coba lagi.'
+    }
+    
+    // Reset captcha on error
+    captchaRef.value?.resetCaptcha()
+  } finally {
+    loading.value = false
   }
 }
-
-// Load agencies on component mount
-onMounted(() => {
-  loadAgencies()
-})
 </script>
 
 <style scoped>
@@ -371,7 +446,7 @@ onMounted(() => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: linear-gradient(135deg, #42A5F5 0%, #1565C0 50%, #FFC107 100%);
+  background: linear-gradient(135deg, #1976d2 0%, #1565c0 100%);
   opacity: 0.95;
 }
 
@@ -387,10 +462,27 @@ onMounted(() => {
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
 }
 
+/* Smooth transitions */
+.v-btn {
+  transition: all 0.3s ease;
+}
+
+.v-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(25, 118, 210, 0.3);
+}
+
+/* Form section spacing */
+.v-form > div {
+  margin-bottom: 16px;
+}
+
 @media (max-width: 960px) {
   .register-card {
     margin: 1rem;
     border-radius: 12px;
+    height: 100vh;
+    overflow-y: auto;
   }
 }
 </style>

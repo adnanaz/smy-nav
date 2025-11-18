@@ -8,6 +8,88 @@ import os from 'os';
 import prisma from '../config/database.js';
 import logger from '../utils/logger.js';
 import { protect, requireRole } from '../middleware/auth.js';
+
+// Helper function to calculate progress percentage based on status
+const getProgressPercentage = (status) => {
+  const progressMap = {
+    'draft': 5,
+    'submitted': 20,
+    'verified': 40,
+    'waiting_quota': 60,
+    'sent_to_center': 75,
+    'waiting_dispatch': 90,
+    'completed': 100,
+    'rejected': 0
+  }
+  
+  return progressMap[status] || 0
+}
+
+// Helper function to get progress step based on status
+const getProgressStep = (status) => {
+  const stepMap = {
+    'draft': 1,
+    'submitted': 2,
+    'verified': 3,
+    'waiting_quota': 4,
+    'sent_to_center': 5,
+    'waiting_dispatch': 6,
+    'completed': 6,
+    'rejected': 1
+  }
+  
+  return stepMap[status] || 1
+}
+
+// Helper function to create payment history entry
+const createPaymentHistoryEntry = (version, status, paymentProof = null, adminNotes = null, actionBy = null) => {
+  const entry = {
+    version,
+    status,
+    timestamp: new Date().toISOString()
+  }
+  
+  if (paymentProof) entry.paymentProof = paymentProof
+  if (adminNotes) entry.adminNotes = adminNotes
+  if (actionBy) entry.actionBy = actionBy
+  
+  return entry
+}
+
+// Helper function to get schedule info for participant
+const getScheduleInfo = async (trainingProgram) => {
+  try {
+    const schedule = await prisma.trainingSchedule.findFirst({
+      where: {
+        trainingProgram,
+        isActive: true,
+        startDate: {
+          gte: new Date() // Future or current schedules
+        }
+      },
+      orderBy: {
+        startDate: 'asc'
+      }
+    });
+
+    if (!schedule) return null;
+
+    const now = new Date();
+    const startDate = new Date(schedule.startDate);
+    const diffTime = startDate.getTime() - now.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    return {
+      ...schedule,
+      daysUntilStart: diffDays,
+      countdownText: diffDays > 0 ? `H-${diffDays}` : diffDays === 0 ? 'Hari ini' : 'Sudah dimulai'
+    };
+  } catch (error) {
+    console.error('Error getting schedule info:', error);
+    return null;
+  }
+};
+
 import { uploadToCloudinary, deleteFromCloudinary } from '../config/cloudinary.js';
 
 const router = express.Router();
@@ -68,17 +150,9 @@ const trainingTypes = {
     certificate: 'SAT Certificate',
     requiredDocuments: ['ktp', 'ijazah', 'foto', 'surat_sehat', 'passport_optional', 'sertifikat_bst']
   },
-  CCM_CMHBT: {
-    name: 'CCM CMHBT',
-    description: 'Pelatihan manajemen kerumunan dan krisis untuk hotel manager di kapal pesiar. Mencakup prosedur evakuasi, komunikasi darurat, dan manajemen penumpang.',
-    duration: '3 hari',
-    processingTime: '2-3 minggu',
-    certificate: 'CCM Certificate',
-    requiredDocuments: ['ktp', 'ijazah', 'foto', 'surat_sehat', 'passport_optional', 'sertifikat_bst']
-  },
-  CCM_CMT: {
-    name: 'CCM CMT',
-    description: 'Pelatihan manajemen kerumunan dan krisis untuk crisis management team di kapal pesiar. Fokus pada koordinasi tim dan pengambilan keputusan dalam situasi darurat.',
+  CCM: {
+    name: 'CCM (Crowd & Crisis Management)',
+    description: 'Pelatihan manajemen kerumunan dan krisis untuk awak kapal pesiar. Mencakup prosedur evakuasi, komunikasi darurat, manajemen penumpang, koordinasi tim dan pengambilan keputusan dalam situasi darurat. Paket lengkap CMHBT dan CMT.',
     duration: '3 hari',
     processingTime: '2-3 minggu',
     certificate: 'CCM Certificate',
@@ -163,7 +237,8 @@ router.get('/', protect, [
   query('search').optional().isString().withMessage('Search must be a string'),
   query('trainingProgram').optional().isIn(Object.keys(trainingTypes)).withMessage('Invalid training type'),
   query('status').optional().isString().withMessage('Status must be a string'),
-  query('agencyOnly').optional().isBoolean().withMessage('AgencyOnly must be boolean')
+  query('agencyOnly').optional().isBoolean().withMessage('AgencyOnly must be boolean'),
+  query('participantOnly').optional().isBoolean().withMessage('ParticipantOnly must be boolean')
 ], async (req, res, next) => {
   try {
     const errors = validationResult(req);
@@ -183,7 +258,8 @@ router.get('/', protect, [
       search = '', 
       trainingProgram,
       status,
-      agencyOnly
+      agencyOnly,
+      participantOnly
     } = req.query;
 
     const offset = (page - 1) * limit;
@@ -195,6 +271,10 @@ router.get('/', protect, [
     if (req.user.role === 'agent' || agencyOnly === 'true') {
       // Agent hanya melihat data agency mereka sendiri
       where.agencyId = req.user.agencyId;
+    } else if (req.user.role === 'participant' || participantOnly === 'true') {
+      // Participant hanya melihat data mereka sendiri
+      // Cari berdasarkan email user yang login
+      where.email = req.user.email;
     } else if (req.user.role === 'admin' || req.user.role === 'super_admin') {
       // Admin melihat semua data, tapi dengan filter status
       if (!status) {
@@ -254,12 +334,30 @@ router.get('/', protect, [
       prisma.participant.count({ where })
     ]);
 
+    // Add schedule information for participants with status >= submitted
+    const participantsWithSchedule = await Promise.all(
+      participants.map(async (participant) => {
+        let scheduleInfo = null;
+        
+        // Only include schedule info for participants with status >= submitted
+        const submittedStatuses = ['submitted', 'verified', 'waiting_quota', 'sent_to_center', 'waiting_dispatch', 'completed'];
+        if (submittedStatuses.includes(participant.status)) {
+          scheduleInfo = await getScheduleInfo(participant.trainingProgram);
+        }
+
+        return {
+          ...participant,
+          scheduleInfo
+        };
+      })
+    );
+
     const totalPages = Math.ceil(total / limit);
 
     res.json({
       success: true,
       data: {
-        participants,
+        participants: participantsWithSchedule,
         pagination: {
           currentPage: parseInt(page),
           totalPages,
@@ -276,6 +374,87 @@ router.get('/', protect, [
     next(error);
   }
 });
+
+// @desc    Search participants for schedule assignment
+// @route   GET /api/participants/search
+// @access  Private (Admin only)
+router.get('/search', protect, requireRole(['admin', 'super_admin']), async (req, res, next) => {
+  try {
+    const { trainingProgram, search = '' } = req.query
+
+    if (!trainingProgram) {
+      return res.status(400).json({
+        success: false,
+        error: 'Training program is required'
+      })
+    }
+
+    // Build search conditions
+    const where = {
+      trainingProgram,
+      // Only include participants who are not already assigned to an active schedule
+      scheduleAssignments: {
+        none: {
+          schedule: {
+            isActive: true,
+            startDate: {
+              gte: new Date()
+            }
+          }
+        }
+      }
+    }
+
+    // Add search filter if provided
+    if (search.trim()) {
+      where.OR = [
+        {
+          fullName: {
+            contains: search,
+            mode: 'insensitive'
+          }
+        },
+        {
+          email: {
+            contains: search,
+            mode: 'insensitive'
+          }
+        },
+        {
+          agency: {
+            contains: search,
+            mode: 'insensitive'
+          }
+        }
+      ]
+    }
+
+    const participants = await prisma.participant.findMany({
+      where,
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        agency: true,
+        status: true,
+        trainingProgram: true
+      },
+      orderBy: {
+        fullName: 'asc'
+      },
+      take: 50 // Limit results for autocomplete
+    })
+
+    res.json({
+      success: true,
+      data: participants
+    })
+
+  } catch (error) {
+    logger.error('Search participants error:', error)
+    next(error)
+  }
+})
 
 // @desc    Get single participant
 // @route   GET /api/participants/:id
@@ -314,9 +493,21 @@ router.get('/:id', protect, async (req, res, next) => {
       });
     }
 
+    // Add schedule information if participant status >= submitted
+    let scheduleInfo = null;
+    const submittedStatuses = ['submitted', 'verified', 'waiting_quota', 'sent_to_center', 'waiting_dispatch', 'completed'];
+    if (submittedStatuses.includes(participant.status)) {
+      scheduleInfo = await getScheduleInfo(participant.trainingProgram);
+    }
+
     res.json({
       success: true,
-      data: { participant }
+      data: { 
+        participant: {
+          ...participant,
+          scheduleInfo
+        }
+      }
     });
 
   } catch (error) {
@@ -417,13 +608,34 @@ router.post('/', protect, upload.fields([
       }
     }
 
-    // Generate registration number
+    // Generate registration number with training program-specific auto-increment
     const agencyCode = req.user.agency?.code || 'AGN';
-    const year = new Date().getFullYear();
-    const count = await prisma.participant.count({
-      where: { agencyId: req.user.agencyId }
+    
+    // Generate training program-specific registration number
+    const existing = await prisma.participant.findMany({
+      where: {
+        registrationNumber: { 
+          startsWith: `SMY-${agencyCode}-`,
+          endsWith: `-${trainingProgram}`
+        }
+      },
+      select: { registrationNumber: true }
     });
-    const registrationNumber = `SMY-${agencyCode}-${String(count + 1).padStart(3, '0')}-${year}`;
+
+    // Find the highest sequence number for this training program
+    let maxSeq = 0;
+    existing.forEach(r => {
+      const rn = r.registrationNumber || '';
+      const regex = new RegExp(`^SMY-${agencyCode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-(\\d+)-${trainingProgram.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`);
+      const m = rn.match(regex);
+      if (m) {
+        const seq = parseInt(m[1], 10);
+        if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
+      }
+    });
+
+    const sequenceNumber = maxSeq + 1;
+    const registrationNumber = `SMY-${agencyCode}-${sequenceNumber}-${trainingProgram}`;
 
     // Prepare documents object
     const documents = {};
@@ -445,8 +657,8 @@ router.post('/', protect, upload.fields([
         trainingProgram,
         registrationNumber,
         status: 'draft',
-        currentProgressStep: 1,
-        progressPercentage: 16.67,
+        currentProgressStep: getProgressStep('draft'),
+        progressPercentage: getProgressPercentage('draft'),
         agencyId: req.user.agencyId,
         createdBy: req.user.id,
         documents
@@ -556,12 +768,21 @@ router.put('/:id', protect, upload.fields([
     const { id } = req.params;
     const updateData = req.body;
 
-    // Find existing participant
+    // Find existing participant with role-based access control
+    let participantQuery = { id };
+    
+    // Apply role-based filtering
+    if (req.user.role === 'agent') {
+      // Agents can only update participants from their agency
+      participantQuery.agencyId = req.user.agencyId;
+    } else if (req.user.role === 'participant') {
+      // Participants can only update their own data
+      participantQuery.createdBy = req.user.id;
+    }
+    // Admin and super_admin can update any participant (no additional filter)
+    
     const existingParticipant = await prisma.participant.findFirst({
-      where: {
-        id,
-        agencyId: req.user.agencyId
-      }
+      where: participantQuery
     });
 
     if (!existingParticipant) {
@@ -636,13 +857,28 @@ router.put('/:id', protect, upload.fields([
       }
     }
 
-    // Handle payment proof upload if provided
+    // Handle payment proof upload if provided (with versioning)
     let updatedPaymentProof = existingParticipant.paymentProof;
+    let updatedPaymentHistory = existingParticipant.paymentHistory || [];
+    let updatedPaymentVersion = existingParticipant.paymentVersion || 1;
+    let updatedPaymentStatus = existingParticipant.paymentStatus;
+    
     if (uploadedFiles.payment_proof) {
       const paymentFile = uploadedFiles.payment_proof[0];
       try {
         const paymentUploadResult = await uploadToCloudinary(paymentFile, `smy-nav/participants/${existingParticipant.registrationNumber}/payment`);
         if (paymentUploadResult.success) {
+          // Check if this is a new payment upload for pay_later
+          const isPayLaterUpload = existingParticipant.paymentOption === 'pay_later' && !existingParticipant.paymentProof;
+          
+          // Increment version for reupload (except for first pay_later upload)
+          if (!isPayLaterUpload) {
+            updatedPaymentVersion = (existingParticipant.paymentVersion || 1) + 1;
+          } else {
+            updatedPaymentVersion = 1; // First upload for pay_later
+          }
+          
+          // Create new payment proof object
           updatedPaymentProof = {
             url: paymentUploadResult.url,
             public_id: paymentUploadResult.public_id,
@@ -650,6 +886,27 @@ router.put('/:id', protect, upload.fields([
             format: paymentUploadResult.format,
             bytes: paymentUploadResult.bytes
           };
+          
+          // Determine status based on context
+          let newStatus = 'pending';
+          if (isPayLaterUpload) {
+            newStatus = 'pending'; // First upload for pay_later
+          } else {
+            newStatus = existingParticipant.paymentStatus === 'rejected' ? 'resubmitted' : 'pending';
+          }
+          
+          // Add new entry to payment history
+          const newHistoryEntry = createPaymentHistoryEntry(
+            updatedPaymentVersion, 
+            newStatus,
+            updatedPaymentProof,
+            null,
+            req.user.id
+          );
+          updatedPaymentHistory = [...updatedPaymentHistory, newHistoryEntry];
+          
+          // Update payment status
+          updatedPaymentStatus = newStatus;
         }
         // Clean up temporary file
         try {
@@ -686,6 +943,9 @@ router.put('/:id', protect, upload.fields([
         ...updateData,
         documents: updatedDocuments,
         paymentProof: updatedPaymentProof,
+        paymentHistory: updatedPaymentHistory,
+        paymentVersion: updatedPaymentVersion,
+        paymentStatus: updatedPaymentStatus,
         updatedAt: new Date()
       },
       include: {
@@ -842,7 +1102,7 @@ router.post('/agency-submission', protect, upload.fields([
     });
 
     // Check if BST certificate is needed and confirmed
-    const programsNeedingBST = ['SAT', 'CCM_CMHBT', 'CCM_CMT', 'SDSD', 'PSCRB', 'UPDATING_BST'];
+    const programsNeedingBST = ['SAT', 'CCM', 'SDSD', 'PSCRB', 'UPDATING_BST'];
     const needsBSTCert = trainingPrograms.some(program => programsNeedingBST.includes(program)) && !hasBasicTraining;
     
     if (needsBSTCert) {
@@ -875,13 +1135,37 @@ router.post('/agency-submission', protect, upload.fields([
       }
     }
 
-    // Generate registration number
+    // Generate registration number with auto-increment for agency bulk
     const agencyCode = req.user.agency?.code || 'AGN';
-    const year = new Date().getFullYear();
-    const count = await prisma.participant.count({
-      where: { agencyId: req.user.agencyId }
+    
+    // Use the first training program for registration number format
+    const primaryTrainingProgram = trainingPrograms[0];
+    
+    // Generate training program-specific registration number
+    const existing = await prisma.participant.findMany({
+      where: {
+        registrationNumber: { 
+          startsWith: `SMY-${agencyCode}-`,
+          endsWith: `-${primaryTrainingProgram}`
+        }
+      },
+      select: { registrationNumber: true }
     });
-    const registrationNumber = `SMY-${agencyCode}-${String(count + 1).padStart(3, '0')}-${year}`;
+
+    // Find the highest sequence number for this training program
+    let maxSeq = 0;
+    existing.forEach(r => {
+      const rn = r.registrationNumber || '';
+      const regex = new RegExp(`^SMY-${agencyCode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-(\\d+)-${primaryTrainingProgram.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`);
+      const m = rn.match(regex);
+      if (m) {
+        const seq = parseInt(m[1], 10);
+        if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
+      }
+    });
+
+    const sequenceNumber = maxSeq + 1;
+    const registrationNumber = `SMY-${agencyCode}-${sequenceNumber}-${primaryTrainingProgram}`;
 
     // Upload files to Cloudinary and prepare documents object
     const documents = {};
@@ -940,10 +1224,10 @@ router.post('/agency-submission', protect, upload.fields([
     console.log('payment_proof in files:', uploadedFiles.payment_proof ? 'YES' : 'NO');
     console.log('payment_proof details:', uploadedFiles.payment_proof);
     
-    // Handle payment proof if pay_now is selected
+    // Handle payment proof if pay_now is selected (shared across all training programs)
     let paymentProof = null;
     if (paymentOption === 'pay_now' && uploadedFiles.payment_proof) {
-      // Upload payment proof to Cloudinary
+      // Upload payment proof to Cloudinary with base registration number
       const paymentFile = uploadedFiles.payment_proof[0];
       try {
         const paymentUploadResult = await uploadToCloudinary(paymentFile, `smy-nav/participants/${registrationNumber}/payment`);
@@ -982,15 +1266,48 @@ router.post('/agency-submission', protect, upload.fields([
     // Create participant submissions for each training program
     const participants = [];
     
-    for (const trainingProgram of trainingPrograms) {
+    for (let i = 0; i < trainingPrograms.length; i++) {
+      const trainingProgram = trainingPrograms[i];
+      
+      // Generate unique registration number for each training program
+      let uniqueRegistrationNumber;
+      if (i === 0) {
+        uniqueRegistrationNumber = registrationNumber;
+      } else {
+        // For additional training programs, generate new registration numbers
+        const existing = await prisma.participant.findMany({
+          where: {
+            registrationNumber: { 
+              startsWith: `SMY-${agencyCode}-`,
+              endsWith: `-${trainingProgram}`
+            }
+          },
+          select: { registrationNumber: true }
+        });
+
+        let maxSeq = 0;
+        existing.forEach(r => {
+          const rn = r.registrationNumber || '';
+          const regex = new RegExp(`^SMY-${agencyCode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-(\\d+)-${trainingProgram.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`);
+          const m = rn.match(regex);
+          if (m) {
+            const seq = parseInt(m[1], 10);
+            if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
+          }
+        });
+
+        const sequenceNumber = maxSeq + 1;
+        uniqueRegistrationNumber = `SMY-${agencyCode}-${sequenceNumber}-${trainingProgram}`;
+      }
+      
       const participantData = {
         fullName: `${fullName} (${trainingProgram})`, // Use actual name from form
         nik: null, // Will be filled later when admin/user complete the data
         trainingProgram,
-        registrationNumber: `${registrationNumber}-${trainingProgram}`,
+        registrationNumber: uniqueRegistrationNumber,
         status: 'draft', // Changed to draft - agency needs to submit manually
-        currentProgressStep: 1,
-        progressPercentage: 10, // Lower percentage for draft status
+        currentProgressStep: getProgressStep('draft'),
+        progressPercentage: getProgressPercentage('draft'),
         // Personal data will be filled later by admin or user - keep as null for clean display
         birthDate: null,
         birthPlace: null,
@@ -1003,6 +1320,8 @@ router.post('/agency-submission', protect, upload.fields([
         // Payment information
         paymentOption: paymentOption,
         paymentProof: paymentProof,
+        paymentVersion: 1,
+        paymentHistory: paymentProof ? [createPaymentHistoryEntry(1, 'pending', paymentProof, null, req.user.id)] : [],
         // Use correct field names from schema
         agencyId: req.user.agencyId,
         createdBy: req.user.id  // Changed from createdById to createdBy to match schema
@@ -1060,12 +1379,21 @@ router.put('/:id/submit', protect, async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    // Find participant and ensure it belongs to the agent's agency
+    // Find participant with role-based access control
+    let participantQuery = { id };
+    
+    // Apply role-based filtering
+    if (req.user.role === 'agent') {
+      // Agents can only submit participants from their agency
+      participantQuery.agencyId = req.user.agencyId;
+    } else if (req.user.role === 'participant') {
+      // Participants can submit their own data
+      participantQuery.createdBy = req.user.id;
+    }
+    // Admin and super_admin can submit any participant (no additional filter)
+    
     const participant = await prisma.participant.findFirst({
-      where: {
-        id,
-        agencyId: req.user.agencyId
-      }
+      where: participantQuery
     });
 
     if (!participant) {
@@ -1089,7 +1417,8 @@ router.put('/:id/submit', protect, async (req, res, next) => {
       data: {
         status: 'submitted',
         submittedAt: new Date(),
-        progressPercentage: 25, // Increase progress when submitted
+        progressPercentage: getProgressPercentage('submitted'),
+        currentProgressStep: getProgressStep('submitted'),
         updatedAt: new Date()
       }
     });
@@ -1106,6 +1435,370 @@ router.put('/:id/submit', protect, async (req, res, next) => {
 
   } catch (error) {
     logger.error('Submit participant error:', error);
+    next(error);
+  }
+});
+
+// @desc    Create participant self-registration (multiple training programs)
+// @route   POST /api/participants/self-register
+// @access  Private (Participant)
+router.post('/self-register', protect, requireRole(['participant']), upload.fields([
+  { name: 'ktp', maxCount: 1 },
+  { name: 'ijazah', maxCount: 1 },
+  { name: 'foto', maxCount: 1 },
+  { name: 'surat_sehat', maxCount: 1 },
+  { name: 'passport', maxCount: 1 },
+  { name: 'sertifikat_bst', maxCount: 1 },
+  { name: 'payment_proof', maxCount: 1 }
+]), [
+  body('fullName')
+    .isLength({ min: 2, max: 255 })
+    .withMessage('Full name must be between 2 and 255 characters'),
+  body('nik')
+    .isLength({ min: 16, max: 16 })
+    .withMessage('NIK must be exactly 16 characters')
+    .isNumeric()
+    .withMessage('NIK must be numeric'),
+  body('trainingPrograms')
+    .custom((value) => {
+      try {
+        const programs = JSON.parse(value);
+        if (!Array.isArray(programs) || programs.length === 0) {
+          throw new Error('Training programs must be a non-empty array');
+        }
+        for (const program of programs) {
+          if (!Object.keys(trainingTypes).includes(program)) {
+            throw new Error(`Invalid training program: ${program}`);
+          }
+        }
+        return true;
+      } catch (error) {
+        throw new Error('Invalid training programs format or values');
+      }
+    }),
+  body('email')
+    .isEmail()
+    .withMessage('Please provide a valid email'),
+  body('phone')
+    .isMobilePhone('id-ID')
+    .withMessage('Please provide a valid Indonesian phone number'),
+  body('birthDate')
+    .isISO8601()
+    .withMessage('Birth date must be a valid date'),
+  body('birthPlace')
+    .isLength({ min: 2, max: 100 })
+    .withMessage('Birth place must be between 2 and 100 characters'),
+  body('gender')
+    .isIn(['male', 'female'])
+    .withMessage('Gender must be either male or female'),
+  body('address')
+    .isLength({ min: 10, max: 500 })
+    .withMessage('Address must be between 10 and 500 characters'),
+  body('hasBSTCertificate')
+    .optional()
+    .isBoolean()
+    .withMessage('hasBSTCertificate must be a boolean value')
+], async (req, res, next) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        error: { 
+          message: 'Validation failed',
+          details: errors.array()
+        }
+      });
+    }
+
+    const {
+      fullName,
+      nik,
+      email,
+      phone,
+      birthDate,
+      birthPlace,
+      gender,
+      address,
+      registrationDate,
+      motherName,
+      nationality,
+      province,
+      city,
+      district,
+      village,
+      rtRw,
+      postalCode,
+      hasBSTCertificate,
+      agreeToTerms,
+      dataProcessingConsent
+    } = req.body;
+
+    const trainingPrograms = JSON.parse(req.body.trainingPrograms);
+
+    // Debug logging for self-registration
+    console.log('=== SELF-REGISTRATION DEBUG ===');
+    console.log('Body:', req.body);
+    console.log('Files received:', req.files ? Object.keys(req.files) : 'No files');
+    console.log('Files detail:', req.files);
+    console.log('Training programs:', trainingPrograms);
+
+    // Check if NIK already exists
+    const existingParticipant = await prisma.participant.findUnique({
+      where: { nik }
+    });
+
+    if (existingParticipant) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'NIK already exists' }
+      });
+    }
+
+    // Get all required documents from selected training programs
+    const allRequiredDocs = new Set();
+    const hasBasicTraining = trainingPrograms.includes('BST') || trainingPrograms.includes('UPDATING_BST');
+    
+    trainingPrograms.forEach(program => {
+      const docs = trainingTypes[program].requiredDocuments;
+      docs.forEach(doc => {
+        // Skip optional documents and BST certificate (handled separately)
+        if (doc !== 'sertifikat_bst' && !doc.endsWith('_optional')) {
+          allRequiredDocs.add(doc);
+        }
+      });
+    });
+
+    // Check if BST certificate is needed and confirmed
+    const programsNeedingBST = ['SAT', 'CCM', 'SDSD', 'PSCRB', 'UPDATING_BST'];
+    const needsBSTCert = trainingPrograms.some(program => programsNeedingBST.includes(program)) && !hasBasicTraining;
+    
+    if (needsBSTCert && !hasBSTCertificate) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'BST certificate confirmation required for selected training programs' }
+      });
+    }
+
+    if (hasBSTCertificate && needsBSTCert) {
+      allRequiredDocs.add('sertifikat_bst');
+    }
+
+    // Add payment proof as required document for self-registration
+    allRequiredDocs.add('payment_proof');
+
+    // Validate required documents
+    const uploadedFiles = req.files || {};
+    const requiredDocsArray = Array.from(allRequiredDocs);
+    
+    console.log('Required documents:', requiredDocsArray);
+    console.log('Uploaded files keys:', Object.keys(uploadedFiles));
+    console.log('Uploaded files structure:', JSON.stringify(uploadedFiles, null, 2));
+    
+    for (const docType of requiredDocsArray) {
+      // Skip optional documents and handle them separately
+      if (docType !== 'passport_optional' && !uploadedFiles[docType.replace('_optional', '')]) {
+        console.log(`Missing document: ${docType}, looking for field: ${docType.replace('_optional', '')}`);
+        return res.status(400).json({
+          success: false,
+          error: { message: `Required document missing: ${docType}` }
+        });
+      }
+    }
+
+    // Get or create default agency for participants
+    let participantAgency = await prisma.agency.findFirst({
+      where: { code: 'SELF' }
+    });
+
+    if (!participantAgency) {
+      participantAgency = await prisma.agency.create({
+        data: {
+          name: 'Self Registration',
+          code: 'SELF',
+          email: 'self@smy-maritime.com',
+          phone: '021-000-0000',
+          address: 'Self Registration Agency',
+          status: 'active'
+        }
+      });
+    }
+
+    // Generate unique registration number for participant with auto-increment per training program
+    const primaryTrainingProgram = trainingPrograms[0];
+    const prefix = 'SMY-SELF-';
+    let baseRegistrationNumber;
+    let attempt = 0;
+    const maxAttempts = 8;
+
+    while (attempt < maxAttempts) {
+      // Fetch existing registration numbers for the specific training program
+      const existing = await prisma.participant.findMany({
+        where: {
+          registrationNumber: { 
+            startsWith: prefix,
+            endsWith: `-${primaryTrainingProgram}`
+          }
+        },
+        select: { registrationNumber: true }
+      });
+
+      // Determine the max numeric sequence for this training program
+      let maxSeq = 0;
+      existing.forEach(r => {
+        const rn = r.registrationNumber || '';
+        // Pattern: SMY-SELF-{number}-{trainingProgram}
+        const regex = new RegExp(`^SMY-SELF-(\\d+)-${primaryTrainingProgram.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`);
+        const m = rn.match(regex);
+        if (m) {
+          const seq = parseInt(m[1], 10);
+          if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
+        }
+      });
+
+      const sequenceNumber = maxSeq + 1 + attempt; // add attempt to avoid retry collisions
+      baseRegistrationNumber = `SMY-SELF-${sequenceNumber}-${primaryTrainingProgram}`;
+
+      // Quick existence check to avoid attempting with an already-used registrationNumber
+      const existsSame = await prisma.participant.findFirst({
+        where: { registrationNumber: baseRegistrationNumber }
+      });
+      if (!existsSame) break;
+
+      // If exists, increment attempt and retry
+      attempt++;
+      await new Promise(resolve => setTimeout(resolve, 20 + attempt * 10));
+    }
+
+    if (!baseRegistrationNumber) {
+      return res.status(500).json({ success: false, error: { message: 'Failed to generate unique registration number' } });
+    }
+
+    // Upload documents to Cloudinary
+    const documents = {};
+    const uploadPromises = [];
+
+    Object.keys(uploadedFiles).forEach(fieldname => {
+      if (uploadedFiles[fieldname] && uploadedFiles[fieldname][0]) {
+        const file = uploadedFiles[fieldname][0];
+        uploadPromises.push(
+          uploadToCloudinary(file, `smy-nav/participants/${baseRegistrationNumber}`)
+            .then(result => {
+              if (result.success) {
+                // Store document details like agency submission
+                documents[fieldname] = {
+                  url: result.url,
+                  public_id: result.public_id,
+                  original_filename: result.original_filename,
+                  format: result.format,
+                  bytes: result.bytes
+                };
+              } else {
+                throw new Error(`Failed to upload ${fieldname}: ${result.error}`);
+              }
+              
+              // Clean up temporary file
+              try {
+                fs.unlinkSync(file.path);
+              } catch (cleanupError) {
+                console.warn('Failed to cleanup temporary file:', cleanupError.message);
+              }
+            })
+            .catch(error => {
+              console.error(`Cloudinary upload error for ${fieldname}:`, error);
+              throw new Error(`Failed to upload ${fieldname}: ${error.message}`);
+            })
+        );
+      }
+    });
+
+    await Promise.all(uploadPromises);
+
+    // Create participant entries for each training program
+    const createdParticipants = [];
+
+    for (let i = 0; i < trainingPrograms.length; i++) {
+      const trainingProgram = trainingPrograms[i];
+      
+      // Generate unique registration number for each training program
+      let participantRegistrationNumber;
+      if (i === 0) {
+        participantRegistrationNumber = baseRegistrationNumber;
+      } else {
+        // For additional training programs, generate new registration numbers
+        const existing = await prisma.participant.findMany({
+          where: {
+            registrationNumber: { 
+              startsWith: 'SMY-SELF-',
+              endsWith: `-${trainingProgram}`
+            }
+          },
+          select: { registrationNumber: true }
+        });
+
+        let maxSeq = 0;
+        existing.forEach(r => {
+          const rn = r.registrationNumber || '';
+          const regex = new RegExp(`^SMY-SELF-(\\d+)-${trainingProgram.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`);
+          const m = rn.match(regex);
+          if (m) {
+            const seq = parseInt(m[1], 10);
+            if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
+          }
+        });
+
+        const sequenceNumber = maxSeq + 1;
+        participantRegistrationNumber = `SMY-SELF-${sequenceNumber}-${trainingProgram}`;
+      }
+
+      const participant = await prisma.participant.create({
+        data: {
+          fullName,
+          nik: i === 0 ? nik : null, // Only first participant gets the NIK to avoid conflicts
+          email,
+          phone,
+          birthDate: new Date(birthDate),
+          birthPlace,
+          gender,
+          address,
+          trainingProgram,
+          registrationNumber: participantRegistrationNumber,
+          status: 'draft', // Self-registration starts as draft, same as agency
+          currentProgressStep: getProgressStep('draft'),
+          progressPercentage: getProgressPercentage('draft'),
+          paymentOption: 'pay_now', // Force pay_now for self-registration
+          paymentProof: documents['payment_proof'] ? {
+            url: documents['payment_proof'].url,
+            public_id: documents['payment_proof'].public_id,
+            original_filename: documents['payment_proof'].original_filename,
+            format: documents['payment_proof'].format,
+            bytes: documents['payment_proof'].bytes
+          } : null,
+          agencyId: participantAgency.id, // Use default agency for self-registration
+          createdBy: req.user.id,
+          documents,
+          notes: null, // Notes kosong untuk self-registration, hanya diisi oleh admin jika ada catatan
+        }
+      });
+
+      createdParticipants.push(participant);
+    }
+
+    logger.info(`New self-registration created: ${baseRegistrationNumber} for ${trainingPrograms.length} training programs: ${trainingPrograms.join(', ')}`);
+
+    res.status(201).json({
+      success: true,
+      data: { 
+        participants: createdParticipants,
+        registrationNumber: baseRegistrationNumber,
+        trainingPrograms,
+        totalPrograms: trainingPrograms.length,
+        message: 'Self-registration successful'
+      }
+    });
+
+  } catch (error) {
+    logger.error('Self-registration error:', error);
     next(error);
   }
 });
@@ -1141,8 +1834,8 @@ router.post('/:id/verify', protect, requireRole(['admin', 'super_admin']), async
       where: { id: participantId },
       data: {
         status: 'verified',
-        currentProgressStep: 2,
-        progressPercentage: 33.33 // 2/6 steps = ~33.33%
+        currentProgressStep: getProgressStep('verified'),
+        progressPercentage: getProgressPercentage('verified')
       },
       include: {
         agency: {
@@ -1205,9 +1898,9 @@ router.post('/:id/reject', protect, requireRole(['admin', 'super_admin']), async
     const updatedParticipant = await prisma.participant.update({
       where: { id: participantId },
       data: {
-        status: 'draft',
-        currentProgressStep: 0,
-        progressPercentage: 0,
+        status: 'rejected',
+        currentProgressStep: getProgressStep('rejected'),
+        progressPercentage: getProgressPercentage('rejected'),
         notes: reason ? `Ditolak: ${reason}` : 'Ditolak oleh admin'
       },
       include: {
@@ -1272,8 +1965,8 @@ router.post('/:id/assign-batch', protect, requireRole(['admin', 'super_admin']),
       where: { id: participantId },
       data: {
         status: 'waiting_quota',
-        currentProgressStep: 3,
-        progressPercentage: 50 // 3/6 steps = 50%
+        currentProgressStep: getProgressStep('waiting_quota'),
+        progressPercentage: getProgressPercentage('waiting_quota')
       },
       include: {
         agency: {
@@ -1336,8 +2029,8 @@ router.post('/:id/confirm-dispatch', protect, requireRole(['admin', 'super_admin
       where: { id: participantId },
       data: {
         status: 'waiting_dispatch',
-        currentProgressStep: 5,
-        progressPercentage: 83.33 // 5/6 steps = ~83.33%
+        currentProgressStep: getProgressStep('waiting_dispatch'),
+        progressPercentage: getProgressPercentage('waiting_dispatch')
       },
       include: {
         agency: {
@@ -1400,8 +2093,8 @@ router.post('/:id/complete', protect, requireRole(['admin', 'super_admin']), asy
       where: { id: participantId },
       data: {
         status: 'completed',
-        currentProgressStep: 6,
-        progressPercentage: 100,
+        currentProgressStep: getProgressStep('completed'),
+        progressPercentage: getProgressPercentage('completed'),
         completedAt: new Date()
       },
       include: {
@@ -1430,6 +2123,250 @@ router.post('/:id/complete', protect, requireRole(['admin', 'super_admin']), asy
 
   } catch (error) {
     logger.error('Complete participant error:', error)
+    next(error)
+  }
+})
+
+// Payment Management Endpoints
+
+// Approve payment
+router.put('/:id/payment/approve', protect, async (req, res, next) => {
+  try {
+    const participantId = req.params.id // Keep as string for UUID
+    const { adminNotes } = req.body
+
+    // Check if participant exists
+    const existingParticipant = await prisma.participant.findUnique({
+      where: { id: participantId }
+    })
+
+    if (!existingParticipant) {
+      return res.status(404).json({
+        success: false,
+        message: 'Participant not found'
+      })
+    }
+
+    // Add approval entry to payment history
+    const currentHistory = existingParticipant.paymentHistory || [];
+    const approvalEntry = createPaymentHistoryEntry(
+      existingParticipant.paymentVersion || 1,
+      'approved',
+      null,
+      adminNotes,
+      req.user.id
+    );
+    const updatedPaymentHistory = [...currentHistory, approvalEntry];
+
+    // Update payment status
+    const updatedParticipant = await prisma.participant.update({
+      where: { id: participantId },
+      data: {
+        paymentStatus: 'approved',
+        paymentHistory: updatedPaymentHistory,
+        adminNotes: adminNotes || null,
+        paymentApprovedAt: new Date(),
+        paymentApprovedBy: req.user.id
+      },
+      include: {
+        agency: {
+          select: {
+            id: true,
+            name: true,
+            code: true
+          }
+        },
+        creator: {
+          select: {
+            id: true,
+            fullName: true,
+            username: true
+          }
+        }
+      }
+    })
+
+    res.json({
+      success: true,
+      participant: updatedParticipant,
+      message: 'Payment approved successfully'
+    })
+
+  } catch (error) {
+    logger.error('Approve payment error:', error)
+    next(error)
+  }
+})
+
+// Reject payment
+router.put('/:id/payment/reject', protect, async (req, res, next) => {
+  try {
+    const participantId = req.params.id // Keep as string for UUID
+    const { adminNotes } = req.body
+
+    if (!adminNotes) {
+      return res.status(400).json({
+        success: false,
+        message: 'Admin notes are required when rejecting payment'
+      })
+    }
+
+    // Check if participant exists
+    const existingParticipant = await prisma.participant.findUnique({
+      where: { id: participantId }
+    })
+
+    if (!existingParticipant) {
+      return res.status(404).json({
+        success: false,
+        message: 'Participant not found'
+      })
+    }
+
+    // Add rejection entry to payment history
+    const currentHistory = existingParticipant.paymentHistory || [];
+    const rejectionEntry = createPaymentHistoryEntry(
+      existingParticipant.paymentVersion || 1,
+      'rejected',
+      null,
+      adminNotes,
+      req.user.id
+    );
+    const updatedPaymentHistory = [...currentHistory, rejectionEntry];
+
+    // Update payment status
+    const updatedParticipant = await prisma.participant.update({
+      where: { id: participantId },
+      data: {
+        paymentStatus: 'rejected',
+        paymentHistory: updatedPaymentHistory,
+        adminNotes: adminNotes,
+        paymentRejectedAt: new Date(),
+        paymentRejectedBy: req.user.id
+      },
+      include: {
+        agency: {
+          select: {
+            id: true,
+            name: true,
+            code: true
+          }
+        },
+        creator: {
+          select: {
+            id: true,
+            fullName: true,
+            username: true
+          }
+        }
+      }
+    })
+
+    res.json({
+      success: true,
+      participant: updatedParticipant,
+      message: 'Payment rejected successfully'
+    })
+
+  } catch (error) {
+    logger.error('Reject payment error:', error)
+    next(error)
+  }
+})
+
+// Get payment history for a participant
+router.get('/:id/payment/history', protect, async (req, res, next) => {
+  try {
+    const participantId = req.params.id
+
+    const participant = await prisma.participant.findUnique({
+      where: { id: participantId },
+      select: {
+        id: true,
+        fullName: true,
+        registrationNumber: true,
+        paymentStatus: true,
+        paymentVersion: true,
+        paymentHistory: true,
+        paymentProof: true,
+        adminNotes: true,
+        agency: {
+          select: {
+            name: true,
+            code: true
+          }
+        }
+      }
+    })
+
+    if (!participant) {
+      return res.status(404).json({
+        success: false,
+        message: 'Participant not found'
+      })
+    }
+
+    res.json({
+      success: true,
+      data: {
+        participant: participant,
+        paymentHistory: participant.paymentHistory || [],
+        currentVersion: participant.paymentVersion || 1
+      }
+    })
+
+  } catch (error) {
+    logger.error('Get payment history error:', error)
+    next(error)
+  }
+})
+
+// POST /api/participants/sync-progress - Sync progress percentage for all participants
+router.post('/sync-progress', protect, requireRole(['admin', 'super_admin']), async (req, res, next) => {
+  try {
+    // Get all participants
+    const participants = await prisma.participant.findMany({
+      select: {
+        id: true,
+        status: true,
+        progressPercentage: true,
+        currentProgressStep: true
+      }
+    })
+
+    let updatedCount = 0
+
+    // Update each participant with correct progress
+    for (const participant of participants) {
+      const correctProgress = getProgressPercentage(participant.status)
+      const correctStep = getProgressStep(participant.status)
+      
+      if (participant.progressPercentage !== correctProgress || 
+          participant.currentProgressStep !== correctStep) {
+        
+        await prisma.participant.update({
+          where: { id: participant.id },
+          data: {
+            progressPercentage: correctProgress,
+            currentProgressStep: correctStep
+          }
+        })
+        
+        updatedCount++
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Progress updated for ${updatedCount} participants`,
+      data: {
+        totalParticipants: participants.length,
+        updatedCount
+      }
+    })
+
+  } catch (error) {
+    logger.error('Sync progress error:', error)
     next(error)
   }
 })
