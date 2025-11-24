@@ -93,49 +93,7 @@
                   {{ authStore.error }}
                 </v-alert>
 
-                <!-- Test Credentials Alert (Development Only) -->
-                <v-alert
-                  type="info"
-                  variant="tonal"
-                  class="mb-4"
-                  density="compact"
-                >
-                  <template #title>
-                    <span class="text-body-2 font-weight-bold">Akun Testing:</span>
-                  </template>
-                  <div class="text-caption">
-                    <div class="mb-1">
-                      <strong>Super Admin:</strong> admin@smy-nav.com
-                    </div>
-                    <div class="mb-1">
-                      <strong>Admin Agensi:</strong> admin@maritime-solutions.com
-                    </div>
-                    <div class="mb-1">
-                      <strong>Agent:</strong> agent1@maritime-solutions.com
-                    </div>
-                    <div class="mb-1">
-                      <strong>Password semua akun:</strong> password123
-                    </div>
-                    <div class="mt-2">
-                      <v-btn
-                        size="x-small"
-                        color="primary"
-                        variant="text"
-                        @click="fillTestCredentials('admin')"
-                      >
-                        Isi Super Admin
-                      </v-btn>
-                      <v-btn
-                        size="x-small"
-                        color="secondary"
-                        variant="text"
-                        @click="fillTestCredentials('agency')"
-                      >
-                        Isi Admin Agensi
-                      </v-btn>
-                    </div>
-                  </div>
-                </v-alert>
+                <!-- Test Credentials removed for production -->
 
                 <!-- Login Form -->
                 <v-form

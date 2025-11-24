@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import axios from 'axios'
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
+import { API_BASE_URL } from '@/config/api.js'
 
 export const useDashboardStore = defineStore('dashboard', {
   state: () => ({

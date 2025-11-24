@@ -90,11 +90,11 @@ const getScheduleInfo = async (trainingProgram) => {
   }
 };
 
-import { uploadToCloudinary, deleteFromCloudinary } from '../config/cloudinary.js';
+import { uploadToStorage, deleteFromStorage } from '../config/storage.js';
 
 const router = express.Router();
 
-// Configure multer for temporary file storage before uploading to Cloudinary
+// Configure multer for temporary file storage before uploading to storage
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     // Use system temporary directory
@@ -820,7 +820,7 @@ router.put('/:id', protect, upload.fields([
         
         const file = uploadedFiles[fieldname][0];
         uploadPromises.push(
-          uploadToCloudinary(file, `smy-nav/participants/${existingParticipant.registrationNumber}`)
+          uploadToStorage(file, `smy-nav/participants/${existingParticipant.registrationNumber}`)
             .then(result => {
               if (result.success) {
                 updatedDocuments[fieldname] = {
@@ -847,9 +847,9 @@ router.put('/:id', protect, upload.fields([
       // Wait for all uploads to complete
       try {
         await Promise.all(uploadPromises);
-        console.log('All files uploaded to Cloudinary successfully');
+        console.log('All files uploaded to storage successfully');
       } catch (uploadError) {
-        console.error('Cloudinary upload failed:', uploadError);
+        console.error('Storage upload failed:', uploadError);
         return res.status(500).json({
           success: false,
           error: { message: `File upload failed: ${uploadError.message}` }
@@ -865,8 +865,8 @@ router.put('/:id', protect, upload.fields([
     
     if (uploadedFiles.payment_proof) {
       const paymentFile = uploadedFiles.payment_proof[0];
-      try {
-        const paymentUploadResult = await uploadToCloudinary(paymentFile, `smy-nav/participants/${existingParticipant.registrationNumber}/payment`);
+    try {
+  const paymentUploadResult = await uploadToStorage(paymentFile, `smy-nav/participants/${existingParticipant.registrationNumber}/payment`);
         if (paymentUploadResult.success) {
           // Check if this is a new payment upload for pay_later
           const isPayLaterUpload = existingParticipant.paymentOption === 'pay_later' && !existingParticipant.paymentProof;
@@ -1177,9 +1177,9 @@ router.post('/agency-submission', protect, upload.fields([
       if (fieldname === 'payment_proof') return;
       
       const file = uploadedFiles[fieldname][0];
-      uploadPromises.push(
-        uploadToCloudinary(file, `smy-nav/participants/${registrationNumber}`)
-          .then(result => {
+    uploadPromises.push(
+  uploadToStorage(file, `smy-nav/participants/${registrationNumber}`)
+      .then(result => {
             if (result.success) {
               documents[fieldname] = {
                 url: result.url,
@@ -1205,9 +1205,9 @@ router.post('/agency-submission', protect, upload.fields([
     // Wait for all uploads to complete
     try {
       await Promise.all(uploadPromises);
-      console.log('All files uploaded to Cloudinary successfully');
+      console.log('All files uploaded to storage successfully');
     } catch (uploadError) {
-      console.error('Cloudinary upload failed:', uploadError);
+      console.error('Storage upload failed:', uploadError);
       return res.status(500).json({
         success: false,
         error: { message: `File upload failed: ${uploadError.message}` }
@@ -1229,8 +1229,8 @@ router.post('/agency-submission', protect, upload.fields([
     if (paymentOption === 'pay_now' && uploadedFiles.payment_proof) {
       // Upload payment proof to Cloudinary with base registration number
       const paymentFile = uploadedFiles.payment_proof[0];
-      try {
-        const paymentUploadResult = await uploadToCloudinary(paymentFile, `smy-nav/participants/${registrationNumber}/payment`);
+    try {
+  const paymentUploadResult = await uploadToStorage(paymentFile, `smy-nav/participants/${registrationNumber}/payment`);
         if (paymentUploadResult.success) {
           paymentProof = {
             url: paymentUploadResult.url,
@@ -1682,7 +1682,7 @@ router.post('/self-register', protect, requireRole(['participant']), upload.fiel
       if (uploadedFiles[fieldname] && uploadedFiles[fieldname][0]) {
         const file = uploadedFiles[fieldname][0];
         uploadPromises.push(
-          uploadToCloudinary(file, `smy-nav/participants/${baseRegistrationNumber}`)
+          uploadToStorage(file, `smy-nav/participants/${baseRegistrationNumber}`)
             .then(result => {
               if (result.success) {
                 // Store document details like agency submission
@@ -1705,7 +1705,7 @@ router.post('/self-register', protect, requireRole(['participant']), upload.fiel
               }
             })
             .catch(error => {
-              console.error(`Cloudinary upload error for ${fieldname}:`, error);
+              console.error(`Storage upload error for ${fieldname}:`, error);
               throw new Error(`Failed to upload ${fieldname}: ${error.message}`);
             })
         );

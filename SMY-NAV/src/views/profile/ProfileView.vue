@@ -181,7 +181,7 @@ import { useAuthStore } from '@/stores/auth-simple'
 import DashboardLayout from '@/components/layout/DashboardLayout.vue'
 
 const authStore = useAuthStore()
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
+import { API_BASE_URL } from '@/config/api.js'
 
 // Reactive data
 const profileValid = ref(false)

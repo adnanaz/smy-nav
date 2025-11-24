@@ -1186,8 +1186,8 @@ const headers = computed(() => {
     }
   ]
 
-  // Add agency column for admin
-  if (authStore.isAdmin) {
+  // Add agency column for admin (with null check)
+  if (authStore.user && authStore.isAdmin) {
     baseHeaders.push({
       title: 'Agensi',
       key: 'agency.name',
@@ -1224,8 +1224,8 @@ const headers = computed(() => {
     }
   )
 
-  // Add payment status for agents (to see admin approval)
-  if (authStore.isAgent || isParticipant.value) {
+  // Add payment status for agents (to see admin approval) (with null check)
+  if (authStore.user && (authStore.isAgent || isParticipant.value)) {
     baseHeaders.push({
       title: 'Status Invoice',
       key: 'paymentStatus',
@@ -1282,16 +1282,18 @@ const statusOptions = computed(() => {
     { value: 'rejected', text: 'Ditolak' }
   ]
 
-  // Filter options based on user role
-  if (authStore.isAgent) {
-    // Agent can see draft and submitted status
-    return baseOptions.filter(option => option.value !== 'draft')
-  } else if (authStore.isAdmin) {
-    // Admin can see all status except draft (draft is only for agents/participants)
-    return baseOptions.filter(option => option.value !== 'draft')
-  } else if (authStore.isParticipant) {
-    // Participant can see all their own status including draft
-    return baseOptions
+  // Filter options based on user role (with null checks)
+  if (authStore.user) {
+    if (authStore.isAgent) {
+      // Agent can see draft and submitted status
+      return baseOptions.filter(option => option.value !== 'draft')
+    } else if (authStore.isAdmin) {
+      // Admin can see all status except draft (draft is only for agents/participants)
+      return baseOptions.filter(option => option.value !== 'draft')
+    } else if (authStore.isParticipant) {
+      // Participant can see all their own status including draft
+      return baseOptions
+    }
   }
 
   return baseOptions
@@ -1306,6 +1308,12 @@ const handleNextParticipant = (currentParticipant) => {
 }
 
 const fetchParticipants = async () => {
+  // Ensure auth is properly loaded before fetching
+  if (!authStore.user || !authStore.token) {
+    loading.value = false
+    return
+  }
+
   loading.value = true
   try {
     const params = {
@@ -1316,18 +1324,20 @@ const fetchParticipants = async () => {
       status: filterStatus.value
     }
 
-    // Add role-based filtering
-    if (authStore.isAdmin) {
-      // Admin hanya melihat data yang sudah di-submit (bukan draft)
-      if (!params.status) {
-        params.status = 'submitted,verified,waiting_quota,sent_to_center,waiting_dispatch,completed,rejected'
+    // Add role-based filtering (with proper null checks)
+    if (authStore.user) {
+      if (authStore.isAdmin) {
+        // Admin hanya melihat data yang sudah di-submit (bukan draft)
+        if (!params.status) {
+          params.status = 'submitted,verified,waiting_quota,sent_to_center,waiting_dispatch,completed,rejected'
+        }
+      } else if (authStore.isAgent) {
+        // Agent hanya melihat data mereka sendiri
+        params.agencyOnly = true
+      } else if (isParticipant.value) {
+        // Participant hanya melihat data mereka sendiri
+        params.participantOnly = true
       }
-    } else if (authStore.isAgent) {
-      // Agent hanya melihat data mereka sendiri
-      params.agencyOnly = true
-    } else if (isParticipant.value) {
-      // Participant hanya melihat data mereka sendiri
-      params.participantOnly = true
     }
 
     const response = await participantStore.fetchParticipants(params)
@@ -1339,17 +1349,26 @@ const fetchParticipants = async () => {
       }
     }
   } catch (error) {
-    showSnackbar('Gagal memuat data peserta', 'error')
+    console.error('Fetch participants error:', error)
+    if (error.message && error.message.trim()) {
+      showSnackbar('Gagal memuat data peserta', 'error')
+    }
   } finally {
     loading.value = false
   }
 }
 
 const fetchTrainingTypes = async () => {
+  // Don't fetch if auth is not ready
+  if (!authStore.user || !authStore.token) {
+    return
+  }
+
   try {
     await participantStore.fetchTrainingTypes()
   } catch (error) {
     console.error('Failed to fetch training types:', error)
+    // Don't show snackbar for training types failure as it's not critical
   }
 }
 
@@ -1372,7 +1391,7 @@ const viewParticipant = (participant) => {
 }
 
 const editParticipant = (participant) => {
-  if (authStore.isParticipant) {
+  if (authStore.user && authStore.isParticipant) {
     // Participant diarahkan ke form daftar diklat dalam mode edit
     router.push(`/daftar-diklat?edit=${participant.id}`)
   } else {
@@ -1571,9 +1590,15 @@ const clearStatusFilter = () => {
 }
 
 const showSnackbar = (message, color = 'success') => {
+  // Prevent showing empty snackbars
+  if (!message || typeof message !== 'string' || message.trim() === '') {
+    console.warn('Attempted to show empty snackbar message:', message)
+    return
+  }
+  
   snackbar.value = {
     show: true,
-    message,
+    message: message.trim(),
     color
   }
 }
@@ -1802,30 +1827,45 @@ const debounceSearch = () => {
 
 // Watchers
 watch(search, (newValue, oldValue) => {
-  // Only trigger search if there's actual change and not just clearing
-  if (newValue !== oldValue) {
+  // Only trigger search if there's actual change, not initial load, and auth is ready
+  if (newValue !== oldValue && authStore.user && authStore.token) {
     debounceSearch()
   }
 })
 
 watch(filterTrainingProgram, (newValue, oldValue) => {
-  if (newValue !== oldValue) {
+  // Only trigger if there's actual change, not initial load, and auth is ready
+  if (newValue !== oldValue && authStore.user && authStore.token) {
     pagination.value.page = 1 // Reset to first page
     fetchParticipants()
   }
 })
 
 watch(filterStatus, (newValue, oldValue) => {
-  if (newValue !== oldValue) {
+  // Only trigger if there's actual change, not initial load, and auth is ready
+  if (newValue !== oldValue && authStore.user && authStore.token) {
     pagination.value.page = 1 // Reset to first page
     fetchParticipants()
   }
 })
 
 // Lifecycle
-onMounted(() => {
-  fetchParticipants()
-  fetchTrainingTypes()
+onMounted(async () => {
+  // Wait for auth to be properly loaded
+  if (authStore.user && authStore.token) {
+    // Fetch training types first (non-critical)
+    await fetchTrainingTypes()
+    // Then fetch participants (critical)
+    await fetchParticipants()
+  } else {
+    // If auth is not ready, wait a bit and try again
+    setTimeout(async () => {
+      if (authStore.user && authStore.token) {
+        await fetchTrainingTypes()
+        await fetchParticipants()
+      }
+    }, 100)
+  }
 })
 </script>
 

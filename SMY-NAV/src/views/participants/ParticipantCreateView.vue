@@ -1001,7 +1001,12 @@ const submitForm = async () => {
   }
 }
 
-const goToParticipantList = () => {
+const goToParticipantList = async () => {
+  // Close dialog first to avoid blank page navigation issue
+  successDialog.value = false
+  // Wait for next tick to ensure dialog is properly closed
+  await nextTick()
+  // Navigate to participant list
   router.push('/participants')
 }
 

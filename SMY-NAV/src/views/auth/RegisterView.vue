@@ -295,7 +295,8 @@ import axios from 'axios'
 const router = useRouter()
 
 // Configure axios base URL
-axios.defaults.baseURL = 'http://localhost:3000'
+import { API_BASE_URL } from '@/config/api.js'
+axios.defaults.baseURL = API_BASE_URL.replace('/api', '')
 
 // Form data
 const registerData = reactive({
