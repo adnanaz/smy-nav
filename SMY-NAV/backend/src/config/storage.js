@@ -34,6 +34,8 @@ const ensureDir = async (dir) => {
 
 // Upload file to local storage. Caller must provide folder (e.g. 'smy-nav/participants/..')
 export const uploadToStorage = async (file, folder = 'smy-nav/participants', options = {}) => {
+  console.log(LOCAL_STORAGE_API_KEY, 'LOCAL_STORAGE_API_KEY');
+  
   try {
     // If an API key is set in environment, require caller to provide same key via options.apiKey
     if (LOCAL_STORAGE_API_KEY) {
